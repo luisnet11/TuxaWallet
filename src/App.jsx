@@ -12,7 +12,16 @@
  *  No invertir tiempo en estilos aquí.
  * ============================================================================
  */
+import { useEffect } from 'react';
+import { getTuxaPublicClient } from './services/viemClient.js';
 
+// dentro del componente App:
+useEffect(() => {
+  const client = getTuxaPublicClient();
+  client.getBlockNumber()
+    .then((n) => console.log('[TuxaWallet] Bloque actual en Tuxachain:', n))
+    .catch((err) => console.error('[TuxaWallet] Error RPC:', err));
+}, []);
 import {
   TUXACHAIN_CHAIN_ID,
   TUXACHAIN_CHAIN_ID_HEX,
