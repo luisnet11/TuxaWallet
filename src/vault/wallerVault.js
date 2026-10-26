@@ -9,7 +9,7 @@
  *  DISEÑO DE SEGURIDAD Y MEMORIA:
  *  - Usa @scure/bip39 y @scure/bip32 (auditadas, cero dependencias Node).
  *  - Aplica "higiene de memoria": las variables con semillas o claves
- *    privadas se sobrescriben con null al dejar de ser necesarias,
+ *    privadas se sobrescriben con ceros (fill) al dejar de ser necesarias,
  *    reduciendo la ventana de exposición en RAM ante volcados de memoria.
  *  - El AAD (Additional Authenticated Data) es el walletId, atando el
  *    ciphertext a esa billetera específica.
@@ -19,6 +19,7 @@
 import { generateMnemonic, mnemonicToSeedSync, wordlist } from '@scure/bip39';
 import { HDKey } from '@scure/bip32';
 import { privateKeyToAccount } from 'viem/accounts';
+import { bytesToHex } from 'viem';
 import {
   generateSalt,
   deriveKey,
@@ -26,7 +27,7 @@ import {
   decryptData,
 } from './crypto.service.js';
 
-// Constantes de derivación HD estándar para EVM (BIP-44)
+// Constante de ruta de derivación HD estándar para cuentas EVM (BIP-44)
 const EVM_DERIVATION_PATH = "m/44'/60'/0'/0";
 
 /* ---------------------------------------------------------------------------
@@ -45,19 +46,19 @@ const EVM_DERIVATION_PATH = "m/44'/60'/0'/0";
 export async function createNewWallet(password, numWords = 24) {
   // 256 bits = 24 palabras | 128 bits = 12 palabras
   const strength = numWords === 24 ? 256 : 128;
-  
-  // 1. Generar semilla con wordlist en inglés
-  let mnemonic = generateMnemonic(wordlist, strength);
-  
+
+  // 1. Generar semilla con wordlist en inglés (compatibilidad universal Web3)
+  const mnemonic = generateMnemonic(wordlist, strength);
+
   // 2. Crear ID único para esta billetera (usado como AAD)
   const walletId = crypto.randomUUID();
-  
+
   // 3. Derivar clave y cifrar semilla
   const salt = generateSalt();
   const key = await deriveKey(password, salt);
   const encrypted = await encryptData(mnemonic, key, walletId);
 
-  // 4. Derivar la primera cuenta (índice 0) para retornar la dirección pública
+  // 4. Derivar la primera cuenta (índice 0) para retornar su dirección pública
   const firstAccount = deriveAccount(mnemonic, 0);
 
   // 5. Construir el Vault Blob (estructura JSON persistible)
@@ -67,20 +68,15 @@ export async function createNewWallet(password, numWords = 24) {
     salt: salt,
     iv: encrypted.iv,
     ciphertext: encrypted.ciphertext,
-    accounts: [
-      { index: 0, address: firstAccount.address }
-    ],
+    accounts: [{ index: 0, address: firstAccount.address }],
     createdAt: Date.now(),
   };
 
-  // 6. Higiene de memoria: eliminar referencias sensibles
-  const mnemonicBackup = mnemonic; // se retorna para que el usuario lo respalde
-  mnemonic = null;
-  firstAccount.privateKey = null;
-
+  // 6. Devolver el mnemonic SOLO para que la UI lo muestre al usuario.
+  //    La UI debe forzar su respaldo; nunca debe persistirse en claro.
   return {
     vaultBlob,
-    mnemonic: mnemonicBackup // ⚠️ Debe mostrarse en pantalla y no guardarse
+    mnemonic,
   };
 }
 
@@ -96,10 +92,11 @@ export async function createNewWallet(password, numWords = 24) {
  * @returns {Promise<{mnemonic: string, key: CryptoKey}>}
  */
 export async function unlockWallet(vaultBlob, password) {
-  // 1. Derivar clave usando el salt guardado
+  // 1. Derivar clave usando el salt guardado en el blob
   const key = await deriveKey(password, vaultBlob.salt);
-  
-  // 2. Descifrar (si la contraseña es incorrecta o el AAD no coincide, lanzará error)
+
+  // 2. Descifrar. Si la contraseña es incorrecta o el AAD no coincide,
+  //    lanzará error (comportamiento de seguridad AES-GCM).
   const mnemonic = await decryptData(
     vaultBlob.ciphertext,
     key,
@@ -123,34 +120,35 @@ export async function unlockWallet(vaultBlob, password) {
  * @returns {{address: string, privateKey: string, index: number}}
  */
 export function deriveAccount(mnemonic, index) {
-  // 1. Convertir mnemonic a seed
+  // 1. Convertir mnemonic a seed (64 bytes)
   const seed = mnemonicToSeedSync(mnemonic);
-  
-  // 2. Crear raíz HD
+
+  // 2. Crear raíz HD desde la seed
   const hdkey = HDKey.fromMasterSeed(seed);
-  
-  // 3. Derivar ruta
+
+  // 3. Derivar la ruta BIP-44 de la cuenta solicitada
   const path = `${EVM_DERIVATION_PATH}/${index}`;
   const child = hdkey.derive(path);
-  
+
   if (!child.privateKey) {
     throw new Error('[TuxaWallet] Fallo al derivar llave privada.');
   }
-  
-  // 4. Convertir llave privada Uint8Array a string hex
-  const privateKeyHex = `0x${Buffer.from(child.privateKey).toString('hex')}`;
-  
-  // 5. Obtener dirección pública EVM con Viem
+
+  // 4. Convertir llave privada (Uint8Array) a string hex usando viem.bytesToHex
+  //    (evita depender de Buffer, que es de Node.js y no existe en navegador).
+  const privateKeyHex = bytesToHex(child.privateKey);
+
+  // 5. Obtener la dirección pública EVM desde la llave privada
   const account = privateKeyToAccount(privateKeyHex);
 
-  // 6. Higiene de memoria
+  // 6. Higiene de memoria: sobrescribir con ceros
   seed.fill(0);
   child.privateKey.fill(0);
 
   return {
     index,
     address: account.address,
-    privateKey: privateKeyHex, // ⚠️ Usar y descartar
+    privateKey: privateKeyHex, // ⚠️ Uso efímero, descartar tras firmar
   };
 }
 
@@ -169,22 +167,19 @@ export function deriveAccount(mnemonic, index) {
  */
 export function addAccountToWallet(vaultBlob, mnemonic, nextIndex) {
   const newAccount = deriveAccount(mnemonic, nextIndex);
-  
+
   // Evitar duplicados
-  if (vaultBlob.accounts.some(a => a.index === nextIndex)) {
-    throw new Error(`[TuxaWallet] La cuenta con índice ${nextIndex} ya existe.`);
+  if (vaultBlob.accounts.some((a) => a.index === nextIndex)) {
+    throw new Error(
+      `[TuxaWallet] La cuenta con índice ${nextIndex} ya existe.`
+    );
   }
 
-  const updatedBlob = {
+  return {
     ...vaultBlob,
     accounts: [
       ...vaultBlob.accounts,
-      { index: newAccount.index, address: newAccount.address }
+      { index: newAccount.index, address: newAccount.address },
     ],
   };
-
-  // Higiene
-  newAccount.privateKey = null;
-
-  return updatedBlob;
-}
+    }
