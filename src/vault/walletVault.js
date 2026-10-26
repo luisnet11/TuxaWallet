@@ -5,19 +5,12 @@
  *  Archivo:   src/vault/walletVault.js
  *  Propósito: Conecta la generación BIP-39 y la derivación HD con el motor
  *             de cifrado AES-GCM (crypto.service.js).
- *
- *  DISEÑO DE SEGURIDAD Y MEMORIA:
- *  - Usa @scure/bip39 y @scure/bip32 (auditadas, cero dependencias Node).
- *  - Aplica "higiene de memoria": las variables con semillas o claves
- *    privadas se sobrescriben con ceros (fill) al dejar de ser necesarias,
- *    reduciendo la ventana de exposición en RAM ante volcados de memoria.
- *  - El AAD (Additional Authenticated Data) es el walletId, atando el
- *    ciphertext a esa billetera específica.
  * ============================================================================
  */
 
 import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english.js';
+// NOTA: El diccionario de inglés se importa sin la extensión .js
+import { wordlist } from '@scure/bip39/wordlists/english';
 import { HDKey } from '@scure/bip32';
 import { privateKeyToAccount } from 'viem/accounts';
 import { bytesToHex } from 'viem';
@@ -136,7 +129,6 @@ export function deriveAccount(mnemonic, index) {
   }
 
   // 4. Convertir llave privada (Uint8Array) a string hex usando viem.bytesToHex
-  //    (evita depender de Buffer, que es de Node.js y no existe en navegador).
   const privateKeyHex = bytesToHex(child.privateKey);
 
   // 5. Obtener la dirección pública EVM desde la llave privada
@@ -183,4 +175,4 @@ export function addAccountToWallet(vaultBlob, mnemonic, nextIndex) {
       { index: newAccount.index, address: newAccount.address },
     ],
   };
-    }
+}
