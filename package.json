@@ -15,7 +15,7 @@
     "react-router-dom": "^6.28.0",
     "viem": "^2.21.0",
     "zustand": "^5.0.1",
-    "@capacitor/core": "^6.2.0"
+    "@capacitor/core": "^6.2.0",
     "@scure/bip39": "^1.4.0",
     "@scure/bip32": "^1.5.0"
   },
