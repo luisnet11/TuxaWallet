@@ -14,185 +14,179 @@
  *    la derivación PBKDF2 (600k iteraciones ~0.5s en móviles).
  * ============================================================================
  */
-
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import {
-  createNewWallet,
-  unlockWallet,
-  addAccountToWallet,
-  deriveAccount,
-} from '../vault/walletVault.js';
-import { getTuxaPublicClient } from '../services/viemClient.js';
+import { parseEther, parseUnits, formatUnits } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createNewWallet, unlockWallet, addAccountToWallet, deriveAccount } from '../vault/walletVault.js';
+import { getTuxaPublicClient, createTuxaWalletClient, ERC20_ABI } from '../services/viemClient.js';
 
 export const useWalletStore = create(
   persist(
     (set, get) => ({
-      /* -----------------------------------------------------------------
-       * ESTADO INICIAL
-       * -------------------------------------------------------------- */
-      vaultBlob: null,       // JSON cifrado persistido en localStorage
-      isUnlocked: false,     // Sesión activa o no
-      mnemonicSession: null, // ⚠️ SOLO en RAM. Se borra al bloquear.
-      activeAccount: null,   // { index, address }
-      isLoading: false,      // Control de UI durante operaciones lentas
-      error: null,           // Mensajes de error para la UI
+      vaultBlob: null,
+      isUnlocked: false,
+      mnemonicSession: null,
+      activeAccount: null,
+      isLoading: false,
+      error: null,
+      trackedTokens: [], // Lista de tokens ERC-20 importados
 
-      /* -----------------------------------------------------------------
-       * ACCIONES
-       * -------------------------------------------------------------- */
-
-      /**
-       * Crea una billetera nueva.
-       * Devuelve el mnemonic al llamador para que la UI lo muestre.
-       */
+      // ... (createWallet, unlockExistingWallet, lockWallet, addNewAccount se mantienen igual)
       createWallet: async (password) => {
         set({ isLoading: true, error: null });
         try {
-          // 1. Generar y cifrar la billetera (default 24 palabras)
           const { vaultBlob, mnemonic } = await createNewWallet(password, 24);
-
-          // 2. Guardar en el estado (Zustand persistirá solo vaultBlob)
-          set({
-            vaultBlob,
-            isUnlocked: true,
-            mnemonicSession: mnemonic,
-            activeAccount: vaultBlob.accounts[0],
-            isLoading: false,
-          });
-
+          set({ vaultBlob, isUnlocked: true, mnemonicSession: mnemonic, activeAccount: vaultBlob.accounts[0], isLoading: false });
           return mnemonic;
-        } catch (err) {
-          set({ isLoading: false, error: err.message });
-          throw err;
-        }
+        } catch (err) { set({ isLoading: false, error: err.message }); throw err; }
       },
-
-      /**
-       * Desbloquea una billetera existente con contraseña.
-       */
       unlockExistingWallet: async (password) => {
         const { vaultBlob } = get();
-        if (!vaultBlob) {
-          set({ error: 'No hay billetera para desbloquear.' });
-          throw new Error('No hay billetera para desbloquear.');
-        }
-
+        if (!vaultBlob) throw new Error('No hay billetera.');
         set({ isLoading: true, error: null });
         try {
-          // 1. Descifrar semilla con la contraseña
           const { mnemonic } = await unlockWallet(vaultBlob, password);
+          set({ isUnlocked: true, mnemonicSession: mnemonic, activeAccount: vaultBlob.accounts[0], isLoading: false });
+        } catch (err) { set({ isLoading: false, error: 'Contraseña incorrecta o datos corruptos.' }); throw err; }
+      },
+      lockWallet: () => set({ isUnlocked: false, mnemonicSession: null, activeAccount: null, error: null }),
+      addNewAccount: () => {
+        const { vaultBlob, mnemonicSession, isLoading, isUnlocked } = get();
+        if (isLoading || !isUnlocked || !mnemonicSession) return;
+        set({ isLoading: true });
+        try {
+          const nextIndex = vaultBlob.accounts.length;
+          const updatedBlob = addAccountToWallet(vaultBlob, mnemonicSession, nextIndex);
+          set({ vaultBlob: updatedBlob, activeAccount: updatedBlob.accounts[nextIndex], isLoading: false });
+        } catch (err) { set({ isLoading: false, error: err.message }); }
+      },
+      setActiveAccount: (index) => {
+        const account = get().vaultBlob?.accounts.find((a) => a.index === index);
+        if (account) set({ activeAccount: account, error: null });
+      },
 
-          // 2. Activar sesión en memoria
-          set({
-            isUnlocked: true,
-            mnemonicSession: mnemonic,
-            activeAccount: vaultBlob.accounts[0],
-            isLoading: false,
-          });
+      // --- NUEVO: DETECCIÓN AUTOMÁTICA DE TOKENS ---
+      addTrackedToken: async (tokenAddress) => {
+        const { trackedTokens } = get();
+        if (trackedTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase())) {
+          throw new Error('El token ya está agregado.');
+        }
+        
+        set({ isLoading: true, error: null });
+        try {
+          const client = getTuxaPublicClient();
+          // Leemos el contrato inteligente en paralelo
+          const [name, symbol, decimals] = await Promise.all([
+            client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'name' }),
+            client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'symbol' }),
+            client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'decimals' })
+          ]);
+
+          const newToken = { address: tokenAddress, name, symbol, decimals };
+          set({ trackedTokens: [...trackedTokens, newToken], isLoading: false });
+          return newToken;
         } catch (err) {
-          // El error de crypto.service.js es genérico por seguridad
-          set({
-            isLoading: false,
-            error: 'Contraseña incorrecta o datos corruptos.',
-          });
+          set({ isLoading: false, error: 'Dirección de token inválida o no compatible con ERC-20.' });
           throw err;
         }
       },
 
-      /**
-       * Bloquea la billetera. Borra la semilla de la RAM.
-       */
-      lockWallet: () => {
-        // Sobrescribir referencias sensibles para forzar GC
-        set({
-          isUnlocked: false,
-          mnemonicSession: null,
-          activeAccount: null,
-          error: null,
-        });
-      },
-
-      /**
-       * Añade una nueva cuenta derivada de la misma semilla.
-       */
-      addNewAccount: () => {
-        const { vaultBlob, mnemonicSession, isLoading, isUnlocked } = get();
-        
-        if (isLoading) return;
-        if (!isUnlocked || !mnemonicSession) {
-          set({ error: 'Billetera bloqueada.' });
-          return;
-        }
-
-        set({ isLoading: true, error: null });
-        try {
-          const nextIndex = vaultBlob.accounts.length;
-          const updatedBlob = addAccountToWallet(
-            vaultBlob,
-            mnemonicSession,
-            nextIndex
-          );
-
-          set({
-            vaultBlob: updatedBlob,
-            activeAccount: updatedBlob.accounts[nextIndex],
-            isLoading: false,
-          });
-        } catch (err) {
-          set({ isLoading: false, error: err.message });
-        }
-      },
-
-      /**
-       * Cambia la cuenta activa (sin salir de la sesión).
-       */
-      setActiveAccount: (accountIndex) => {
-        const { vaultBlob } = get();
-        const account = vaultBlob.accounts.find((a) => a.index === accountIndex);
-        if (account) {
-          set({ activeAccount: account, error: null });
-        }
-      },
-
-      /**
-       * Obtiene el balance on-chain de la cuenta activa usando Viem.
-       * Retorna el balance en formato string legible.
-       */
-      fetchActiveAccountBalance: async () => {
-        const { activeAccount } = get();
+      // --- NUEVO: SALDO DE TOKEN ERC-20 ---
+      fetchERC20Balance: async (tokenAddress) => {
+        const { activeAccount, trackedTokens } = get();
         if (!activeAccount) return '0';
+        const token = trackedTokens.find(t => t.address === tokenAddress);
+        if (!token) return '0';
 
         try {
           const client = getTuxaPublicClient();
-          const balanceWei = await client.getBalance({
-            address: activeAccount.address,
+          const balanceWei = await client.readContract({
+            address: tokenAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [activeAccount.address]
           });
-          // Convertir de Wei (BigInt) a ETH legible
-          const eth = Number(balanceWei) / 1e18;
-          return eth.toFixed(6);
+          // Formateo dinámico usando los decimales del token
+          return formatUnits(balanceWei, token.decimals);
+        } catch (err) { console.error(err); return '0'; }
+      },
+
+      // --- NUEVO: ENVIAR TOKEN ERC-20 ---
+      sendERC20Token: async (tokenAddress, toAddress, amount, dryRun = false) => {
+        const { isUnlocked, mnemonicSession, activeAccount, trackedTokens } = get();
+        if (!isUnlocked || !mnemonicSession) throw new Error('Billetera bloqueada.');
+        
+        const token = trackedTokens.find(t => t.address === tokenAddress);
+        if (!token) throw new Error('Token no encontrado en la lista.');
+
+        set({ isLoading: true, error: null });
+        try {
+          const { privateKey } = deriveAccount(mnemonicSession, activeAccount.index);
+          const account = privateKeyToAccount(privateKey);
+          const walletClient = createTuxaWalletClient(account);
+
+          // Conversión dinámica usando los decimales del token
+          const parsedAmount = parseUnits(amount, token.decimals);
+
+          const tx = {
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [toAddress, parsedAmount],
+            account,
+          };
+
+          if (dryRun) {
+            const signedTx = await walletClient.signTransaction(tx);
+            set({ isLoading: false });
+            return { success: true, hash: signedTx, message: `✅ Firma ERC-20 (${token.symbol}) exitosa (Dry Run).` };
+          } else {
+            const hash = await walletClient.writeContract(tx);
+            set({ isLoading: false });
+            return { success: true, hash, message: `✅ Transferencia de ${token.symbol} enviada.` };
+          }
         } catch (err) {
-          console.error('[TuxaWallet] Error al consultar balance:', err);
-          return '0';
+          set({ isLoading: false, error: err.shortMessage || err.message });
+          throw err;
         }
       },
 
-      /**
-       * Limpia el estado de error (para la UI).
-       */
+      fetchActiveAccountBalance: async () => {
+        const { activeAccount } = get();
+        if (!activeAccount) return '0';
+        try {
+          const client = getTuxaPublicClient();
+          const balanceWei = await client.getBalance({ address: activeAccount.address });
+          return (Number(balanceWei) / 1e18).toFixed(6);
+        } catch (err) { return '0'; }
+      },
+      
+      // Mantengo sendNativeTransaction y clearError de la versión anterior
+      sendNativeTransaction: async (toAddress, amountEther, dryRun = false) => {
+        const { isUnlocked, mnemonicSession, activeAccount, isLoading } = get();
+        if (isLoading || !isUnlocked || !mnemonicSession) return;
+        set({ isLoading: true, error: null });
+        try {
+          const { privateKey } = deriveAccount(mnemonicSession, activeAccount.index);
+          const account = privateKeyToAccount(privateKey);
+          const walletClient = createTuxaWalletClient(account);
+          const tx = { to: toAddress, value: parseEther(amountEther) };
+          if (dryRun) {
+            const signedTx = await walletClient.signTransaction(tx);
+            set({ isLoading: false });
+            return { success: true, hash: signedTx, message: "✅ Firma ETH exitosa (Dry Run)." };
+          } else {
+            const hash = await walletClient.sendTransaction(tx);
+            set({ isLoading: false });
+            return { success: true, hash, message: "✅ ETH enviado." };
+          }
+        } catch (err) { set({ isLoading: false, error: err.message }); throw err; }
+      },
       clearError: () => set({ error: null }),
     }),
     {
-      name: 'tuxawallet-storage', // clave en localStorage
+      name: 'tuxawallet-storage',
       storage: createJSONStorage(() => localStorage),
-
-      /**
-       * ⚠️ CRÍTICO: Solo persistir el vaultBlob.
-       * El mnemonicSession y la cuenta activa NUNCA deben tocar el disco.
-       */
-      partialize: (state) => ({
-        vaultBlob: state.vaultBlob,
-      }),
+      // Persistimos el vaultBlob Y los tokens importados
+      partialize: (state) => ({ vaultBlob: state.vaultBlob, trackedTokens: state.trackedTokens }),
     }
   )
 );
