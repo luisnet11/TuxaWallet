@@ -26,21 +26,13 @@ export default function Welcome() {
     <div className="min-h-dvh overflow-hidden bg-base-100 bg-[radial-gradient(ellipse_at_top,_color-mix(in_oklch,var(--color-primary)_32%,transparent),_transparent_65%)]">
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 pt-14">
         <div className="flex items-center justify-center gap-2">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/30">
-            <svg
-              viewBox="0 0 24 24"
-              className="size-5 text-primary-content"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 2.5 4.5 5.5v6c0 4.6 3.2 8.6 7.5 10 4.3-1.4 7.5-5.4 7.5-10v-6L12 2.5Z" />
-              <path d="m8.75 12 2.25 2.25 4.25-4.5" />
-            </svg>
-          </div>
+          <img
+            src="/logo.png"
+            alt="Tuxachain Logo"
+            className="h-12 w-auto object-contain select-none"
+            draggable="false"
+            loading="eager"
+          />
           <span className="text-lg font-semibold tracking-tight">
             Tuxa<span className="text-secondary">Wallet</span>
           </span>
@@ -68,15 +60,13 @@ export default function Welcome() {
           </button>
         </div>
 
-        <div className="relative mt-auto flex justify-center pt-8">
-          <div className="pointer-events-none absolute bottom-6 left-1/2 size-64 -translate-x-1/2 rounded-full bg-primary/25 blur-3xl" aria-hidden="true" />
+        <div className="mt-auto pt-8">
           <img
-            src="/images/tuxa-penguin.png"
-            alt="Tux, la mascota pingüino poligonal de TuxaWallet"
-            width={280}
-            height={280}
-            className="relative w-64 max-w-full select-none [mask-image:radial-gradient(circle,black_55%,transparent_72%)]"
-            draggable={false}
+            src="/mascot.png"
+            alt="Tuxachain Mascot"
+            className="w-64 h-64 mx-auto object-contain select-none"
+            draggable="false"
+            loading="eager"
           />
         </div>
       </main>
