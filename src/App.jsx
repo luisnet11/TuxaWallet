@@ -10,121 +10,96 @@ const styles = {
   button: { padding: '10px 15px', background: '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '5px', marginTop: '5px' },
   buttonDanger: { padding: '10px 15px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '5px' },
   buttonBlue: { padding: '10px 15px', background: '#1976d2', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '5px' },
+  buttonGreen: { padding: '10px 15px', background: '#2e7d32', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '5px' },
   error: { color: 'red', fontSize: '0.9em', marginTop: '5px' },
-  mnemonicBox: { background: '#fff3cd', border: '1px solid #ffeeba', padding: '10px', borderRadius: '4px', fontFamily: 'monospace', wordSpacing: '4px' }
+  mnemonicBox: { background: '#fff3cd', border: '1px solid #ffeeba', padding: '10px', borderRadius: '4px', fontFamily: 'monospace', wordSpacing: '4px' },
+  codeBox: { background: '#fff', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', wordBreak: 'break-all', fontSize: '0.85em', marginTop: '10px' }
 };
 
 export default function App() {
   const {
-    isUnlocked, vaultBlob, activeAccount, isLoading, error,
-    createWallet, unlockExistingWallet, lockWallet, addNewAccount,
-    fetchActiveAccountBalance, clearError
+    isUnlocked, vaultBlob, activeAccount, isLoading, error, trackedTokens,
+    createWallet, unlockExistingWallet, lockWallet, addNewAccount, setActiveAccount,
+    fetchActiveAccountBalance, sendNativeTransaction, addTrackedToken, fetchERC20Balance, sendERC20Token, clearError
   } = useWalletStore();
 
   const [password, setPassword] = useState('');
   const [newMnemonic, setNewMnemonic] = useState(null);
   const [balance, setBalance] = useState(null);
   const [localError, setLocalError] = useState('');
-  const [dappResult, setDappResult] = useState('');
+  
+  // Estados para Tokens
+  const [importTokenAddr, setImportTokenAddr] = useState('');
+  const [tokenBalances, setTokenBalances] = useState({}); // { "0x...": "100.5" }
+  const [tokenToSend, setTokenToSend] = useState('');
+  const [tokenSendTo, setTokenSendTo] = useState('');
+  const [tokenSendAmount, setTokenSendAmount] = useState('');
+  const [txResult, setTxResult] = useState(null);
 
-  // Inyectar el provider al arrancar la app (simula una extensión de navegador)
-  useEffect(() => {
-    injectTuxaProvider();
-  }, []);
+  useEffect(() => { injectTuxaProvider(); }, []);
 
+  // ... (handleCreate, handleUnlock, handleLock se mantienen de tu versión anterior)
   const handleCreate = async () => {
-    setLocalError('');
-    setBalance(null);
-    const check = validatePasswordStrength(password);
-    if (!check.valid) {
-      setLocalError(check.errors.join(' '));
-      return;
-    }
-    try {
-      const mnemonic = await createWallet(password);
-      setNewMnemonic(mnemonic);
-      setPassword('');
-    } catch (err) { console.error(err); }
+    setLocalError(''); const check = validatePasswordStrength(password);
+    if (!check.valid) return setLocalError(check.errors.join(' '));
+    try { const m = await createWallet(password); setNewMnemonic(m); setPassword(''); } catch (err) { console.error(err); }
   };
-
   const handleUnlock = async () => {
-    setLocalError('');
-    setBalance(null);
+    setLocalError(''); try { await unlockExistingWallet(password); setPassword(''); } catch (err) { console.error(err); }
+  };
+  const handleLock = () => { lockWallet(); setNewMnemonic(null); setBalance(null); setTxResult(null); setTokenBalances({}); };
+
+  // --- LÓGICA DE TOKENS ---
+  const handleImportToken = async () => {
+    if (!importTokenAddr) return;
     try {
-      await unlockExistingWallet(password);
-      setPassword('');
-    } catch (err) { console.error(err); }
+      const token = await addTrackedToken(importTokenAddr);
+      alert(`Token importado: ${token.name} (${token.symbol}) con ${token.decimals} decimales.`);
+      setImportTokenAddr('');
+    } catch (err) { setLocalError(err.message); }
   };
 
-  const handleLock = () => {
-    lockWallet();
-    setNewMnemonic(null);
-    setBalance(null);
-    setDappResult('');
+  const handleCheckTokenBalance = async (addr) => {
+    setTokenBalances(prev => ({ ...prev, [addr]: 'Consultando...' }));
+    const bal = await fetchERC20Balance(addr);
+    setTokenBalances(prev => ({ ...prev, [addr]: bal }));
   };
 
-  // --- SIMULADOR DE DAPP ---
-  const simulateDappConnect = async () => {
-    setDappResult('Conectando...');
+  const handleSendToken = async (dryRun) => {
+    setTxResult(null); setLocalError('');
+    if (!tokenToSend || !tokenSendTo || !tokenSendAmount) return setLocalError('Llena todos los campos del token.');
     try {
-      // Simula lo que haría una DApp: window.ethereum.request
-      const accounts = await window.tuxachain.request({ method: 'eth_requestAccounts' });
-      setDappResult(`DApp conectada con éxito. Cuentas: ${accounts.join(', ')}`);
+      const res = await sendERC20Token(tokenToSend, tokenSendTo, tokenSendAmount, dryRun);
+      setTxResult(res);
     } catch (err) {
-      setDappResult(`Error DApp: ${err.message}`);
+      setTxResult({ success: false, message: err.message });
     }
   };
 
-  const simulateDappSign = async () => {
-    setDappResult('Firmando mensaje...');
+  const handleSendNative = async (dryRun) => {
+    setTxResult(null); setLocalError('');
+    if (!tokenSendTo || !tokenSendAmount) return setLocalError('Ingresa dirección y monto.');
     try {
-      const msg = "Hola desde la DApp de prueba";
-      const accounts = await window.tuxachain.request({ method: 'eth_requestAccounts' });
-      const sig = await window.tuxachain.request({ 
-        method: 'personal_sign', 
-        params: [msg, accounts[0]] 
-      });
-      setDappResult(`Firma exitosa: ${sig.slice(0, 30)}...`);
-    } catch (err) {
-      setDappResult(`Error DApp: ${err.message}`);
-    }
+      const res = await sendNativeTransaction(tokenSendTo, tokenSendAmount, dryRun);
+      setTxResult(res);
+    } catch (err) { setTxResult({ success: false, message: err.message }); }
   };
 
   return (
     <div style={styles.container}>
-      <h1>TuxaWallet — Pruebas</h1>
+      <h1>TuxaWallet — Pruebas (Tokens ERC-20)</h1>
 
       {(error || localError) && (
-        <div style={styles.error}>
-          <strong>Error:</strong> {localError || error}
-          <button onClick={() => { clearError(); setLocalError(''); }} style={{ marginLeft: '10px' }}>X</button>
-        </div>
+        <div style={styles.error}><strong>Error:</strong> {localError || error}<button onClick={() => { clearError(); setLocalError(''); }} style={{ marginLeft: '10px' }}>X</button></div>
       )}
 
-      {isLoading && (
-        <div style={styles.card}>
-          <p>⏳ Derivando claves (PBKDF2 600k iteraciones)... Por favor espera.</p>
-        </div>
-      )}
+      {isLoading && <div style={styles.card}><p>⏳ Procesando... espera.</p></div>}
 
       {!isUnlocked && !isLoading && (
         <div style={styles.card}>
           <h2>{vaultBlob ? 'Desbloquear Billetera' : 'Crear Nueva Billetera'}</h2>
-          <p style={{ fontSize: '0.8em', color: '#666' }}>
-            Contraseña requerida: min 12 caracteres, mayúscula, minúscula, número y símbolo.
-          </p>
-          <input
-            type="password"
-            placeholder="Contraseña maestra"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={styles.input}
-          />
-          {vaultBlob ? (
-            <button style={styles.button} onClick={handleUnlock}>Desbloquear</button>
-          ) : (
-            <button style={styles.button} onClick={handleCreate}>Crear Billetera</button>
-          )}
+          <input type="password" placeholder="Contraseña maestra" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.input} />
+          {vaultBlob ? <button style={styles.button} onClick={handleUnlock}>Desbloquear</button> : <button style={styles.button} onClick={handleCreate}>Crear Billetera</button>}
         </div>
       )}
 
@@ -134,65 +109,68 @@ export default function App() {
             <div style={styles.card}>
               <h3 style={{ color: 'red' }}>⚠️ Anota estas 24 palabras</h3>
               <div style={styles.mnemonicBox}>{newMnemonic}</div>
-              <button style={{ ...styles.button, background: '#555', marginTop: '10px' }} onClick={() => setNewMnemonic(null)}>
-                Ya las he guardado
-              </button>
+              <button style={{ ...styles.button, background: '#555' }} onClick={() => setNewMnemonic(null)}>Ya las guardé</button>
             </div>
           )}
 
           <div style={styles.card}>
             <h2>Cuenta Activa (Índice: {activeAccount?.index})</h2>
             <p><strong>Dirección:</strong> <br/><code style={{ wordBreak: 'break-all' }}>{activeAccount?.address}</code></p>
-            
             <div style={{ marginTop: '10px', padding: '10px', background: '#eef', borderRadius: '4px' }}>
-              <strong>Saldo en Tuxachain:</strong> <br/>
-              {balance !== null ? (
-                <span style={{ fontSize: '1.2em', fontWeight: 'bold' }}>{balance} ETH</span>
-              ) : (
-                <span>---</span>
-              )}
-              <br/>
-              <button style={styles.button} onClick={async () => {
-                setBalance('Consultando...');
-                const bal = await fetchActiveAccountBalance();
-                setBalance(bal);
-              }}>Consultar Saldo en Red</button>
+              <strong>Saldo ETH:</strong> {balance !== null ? <span>{balance} ETH</span> : <span>---</span>}
+              <br/><button style={styles.button} onClick={async () => { setBalance('...'); setBalance(await fetchActiveAccountBalance()); }}>Consultar Saldo ETH</button>
             </div>
           </div>
 
           <div style={styles.card}>
             <h3>Cuentas Derivadas</h3>
-            <ul>
-              {vaultBlob?.accounts.map((acc) => (
-                <li key={acc.index} style={{ marginBottom: '5px' }}>
-                  Cuenta {acc.index}: {acc.address.slice(0, 8)}...{acc.address.slice(-6)}
+            <ul>{vaultBlob?.accounts.map((acc) => <li key={acc.index}>Cuenta {acc.index}: {acc.address.slice(0, 8)}...{acc.address.slice(-6)} <button onClick={() => setActiveAccount(acc.index)}>Activar</button></li>)}</ul>
+            <button style={styles.button} onClick={addNewAccount}>+ Añadir Cuenta</button>
+          </div>
+
+          {/* --- TARJETA TOKENS ERC-20 --- */}
+          <div style={{...styles.card, borderColor: '#f57c00', background: '#fff3e0'}}>
+            <h3 style={{ color: '#f57c00', marginTop: 0 }}>🪙 Tokens ERC-20 (Auto-Decimales)</h3>
+            <p style={{ fontSize: '0.85em', color: '#555' }}>Pega la dirección de contrato de un token (ej. USDC, WNEAR) para detectar sus decimales automáticamente.</p>
+            
+            <input type="text" placeholder="Dirección del contrato del token (0x...)" value={importTokenAddr} onChange={(e) => setImportTokenAddr(e.target.value)} style={styles.input} />
+            <button style={{ ...styles.button, background: '#f57c00' }} onClick={handleImportToken}>Importar Token</button>
+
+            <ul style={{ marginTop: '15px' }}>
+              {trackedTokens.map(t => (
+                <li key={t.address} style={{ marginBottom: '10px', background: '#fff', padding: '10px', borderRadius: '4px' }}>
+                  <strong>{t.symbol}</strong> ({t.name}) - {t.decimals} decimales<br/>
+                  <code style={{ fontSize: '0.8em' }}>{t.address}</code><br/>
+                  <span>Balance: <strong>{tokenBalances[t.address] || '---'}</strong></span>
+                  <button style={{ marginLeft: '10px' }} onClick={() => handleCheckTokenBalance(t.address)}>Consultar</button>
+                  <button style={{ marginLeft: '5px', background: '#1976d2', color: 'white', border: 'none', padding: '2px 8px', borderRadius: '4px' }} onClick={() => setTokenToSend(t.address)}>Seleccionar para Enviar</button>
                 </li>
               ))}
             </ul>
-            <button style={styles.button} onClick={addNewAccount}>+ Añadir Nueva Cuenta</button>
           </div>
 
-          {/* SIMULADOR DE DAPP */}
-          <div style={{...styles.card, borderColor: '#1976d2', background: '#e3f2fd'}}>
-            <h3 style={{ color: '#1976d2', marginTop: 0 }}>🔌 Simulador de DApp (EIP-1193)</h3>
-            <p style={{ fontSize: '0.9em' }}>Prueba cómo una DApp externa interactúa con TuxaWallet.</p>
+          {/* --- TARJETA ENVÍO --- */}
+          <div style={{...styles.card, borderColor: '#2e7d32', background: '#f1f8e9'}}>
+            <h3 style={{ color: '#2e7d32', marginTop: 0 }}>💸 Enviar Activos</h3>
+            
+            <input type="text" placeholder="Dirección destino (0x...)" value={tokenSendTo} onChange={(e) => setTokenSendTo(e.target.value)} style={styles.input} />
+            <input type="number" placeholder="Monto (ej: 0.1)" value={tokenSendAmount} onChange={(e) => setTokenSendAmount(e.target.value)} style={styles.input} />
             
             <div style={{ marginBottom: '10px' }}>
-              <button style={styles.buttonBlue} onClick={simulateDappConnect}>Simular Conexión DApp</button>
-              <button style={styles.buttonBlue} onClick={simulateDappSign}>Simular Firma de Mensaje</button>
+              <button style={styles.buttonGreen} onClick={() => handleSendNative(true)}>Probar ETH (Dry Run)</button>
+              <button style={styles.buttonGreen} onClick={() => handleSendNative(false)}>Enviar ETH (Real)</button>
             </div>
 
-            {dappResult && (
-              <div style={{ background: '#fff', padding: '10px', borderRadius: '4px', border: '1px solid #90caf9', wordBreak: 'break-all', fontSize: '0.9em' }}>
-                <strong>Respuesta del Provider:</strong><br/>
-                {dappResult}
-              </div>
-            )}
+            <div style={{ padding: '10px', background: '#fff', border: '1px solid #ccc', borderRadius: '4px' }}>
+              <strong>Envío de Token Seleccionado:</strong> {tokenToSend || '(Ninguno)'}<br/>
+              <button style={{ ...styles.buttonBlue, marginTop: '10px' }} onClick={() => handleSendToken(true)}>Probar Token (Dry Run)</button>
+              <button style={{ ...styles.buttonBlue, marginTop: '10px' }} onClick={() => handleSendToken(false)}>Enviar Token (Real)</button>
+            </div>
+
+            {txResult && <div style={styles.codeBox}><strong>{txResult.success ? '✅ ' : '❌ '}</strong>{txResult.message}{txResult.hash && <p>Hash: {txResult.hash}</p>}</div>}
           </div>
 
-          <div style={{ marginTop: '20px' }}>
-            <button style={styles.buttonDanger} onClick={handleLock}>Bloquear Billetera</button>
-          </div>
+          <div style={{ marginTop: '20px' }}><button style={styles.buttonDanger} onClick={handleLock}>Bloquear Billetera</button></div>
         </>
       )}
     </div>
