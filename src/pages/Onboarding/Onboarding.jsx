@@ -10,14 +10,14 @@ const TABS = [
   { id: 'import', label: 'Importar Billetera' },
 ];
 
-export default function Onboarding({ onComplete = () => {} }) {
+export default function Onboarding({ onComplete = () => {}, initialTab = 'create' }) {
   const createWallet = useWalletStore((s) => s.createWallet);
   const importExistingWallet = useWalletStore((s) => s.importExistingWallet);
   const isLoading = useWalletStore((s) => s.isLoading);
   const storeError = useWalletStore((s) => s.error);
   const clearError = useWalletStore((s) => s.clearError);
 
-  const [activeTab, setActiveTab] = useState('create');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [createdMnemonic, setCreatedMnemonic] = useState(null);
 
   const switchTab = (tabId) => {

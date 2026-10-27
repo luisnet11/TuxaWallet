@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useWalletStore } from './store/useWalletStore.js';
 import { validatePasswordStrength } from './vault/crypto.service.js';
 import { injectTuxaProvider } from './services/walletProvider.js';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Onboarding from './pages/Onboarding/Onboarding.jsx';
+import Welcome from './pages/Welcome/Welcome.jsx';
 
 const styles = {
   container: { padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto', lineHeight: 1.5 },
@@ -18,13 +20,27 @@ const styles = {
 };
 
 export default function App() {
-  const hasVault = useWalletStore((s) => Boolean(s.vaultBlob));
-  const [onboardingDone, setOnboardingDone] = useState(hasVault);
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
+  );
+}
 
-  if (!onboardingDone) {
-    return <Onboarding onComplete={() => setOnboardingDone(true)} />;
-  }
-  return <WalletDebugPanel />;
+function AppRoutes() {
+  const navigate = useNavigate();
+  const hasVault = useWalletStore((s) => Boolean(s.vaultBlob));
+  const goToDashboard = () => navigate('/dashboard', { replace: true });
+
+  return (
+    <Routes>
+      <Route path="/" element={hasVault ? <Navigate to="/dashboard" replace /> : <Welcome />} />
+      <Route path="/create-wallet" element={<Onboarding key="create" initialTab="create" onComplete={goToDashboard} />} />
+      <Route path="/import-wallet" element={<Onboarding key="import" initialTab="import" onComplete={goToDashboard} />} />
+      <Route path="/dashboard" element={<WalletDebugPanel />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }
 
 function WalletDebugPanel() {
