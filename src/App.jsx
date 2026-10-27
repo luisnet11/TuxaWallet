@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useWalletStore } from './store/useWalletStore.js';
 import { validatePasswordStrength } from './vault/crypto.service.js';
 import { injectTuxaProvider } from './services/walletProvider.js';
+import Onboarding from './pages/Onboarding/Onboarding.jsx';
 
 const styles = {
   container: { padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto', lineHeight: 1.5 },
@@ -17,6 +18,16 @@ const styles = {
 };
 
 export default function App() {
+  const hasVault = useWalletStore((s) => Boolean(s.vaultBlob));
+  const [onboardingDone, setOnboardingDone] = useState(hasVault);
+
+  if (!onboardingDone) {
+    return <Onboarding onComplete={() => setOnboardingDone(true)} />;
+  }
+  return <WalletDebugPanel />;
+}
+
+function WalletDebugPanel() {
   const {
     isUnlocked, vaultBlob, activeAccount, isLoading, error, trackedTokens,
     createWallet, unlockExistingWallet, lockWallet, addNewAccount, setActiveAccount,
