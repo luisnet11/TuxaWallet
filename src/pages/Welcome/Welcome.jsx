@@ -25,18 +25,15 @@ export default function Welcome() {
   return (
     <div className="min-h-dvh overflow-hidden bg-base-100 bg-[radial-gradient(ellipse_at_top,_color-mix(in_oklch,var(--color-primary)_32%,transparent),_transparent_65%)]">
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 pt-14">
-        <div className="flex items-center justify-center gap-2">
-          <img
-            src="/logo.png"
-            alt="Tuxachain Logo"
-            className="h-12 w-auto object-contain select-none"
-            draggable="false"
-            loading="eager"
-          />
-          <span className="text-lg font-semibold tracking-tight">
-            Tuxa<span className="text-secondary">Wallet</span>
-          </span>
-        </div>
+  <div className="flex items-center justify-center">
+  <img
+  src="/logo.png"
+  alt="Tuxachain Logo"
+  className="h-12 w-auto object-contain select-none"
+  draggable="false"
+  loading="eager"
+  />
+  </div>
 
         <section className="mt-12 text-center">
           <h1 className="text-4xl font-bold leading-tight tracking-tight text-balance">
