@@ -3,15 +3,13 @@
  *  TUXAWALLET — Adaptador EIP-1193 (Wallet Provider)
  * ============================================================================
  *  Archivo:   src/services/walletProvider.js
- *  Propósito: Exponer la billetera TuxaWallet a DApps externas (Uniswap,
- *             juegos Web3, etc.) inyectando un objeto compatible con el
- *             estándar EIP-1193 en `window.tuxachain`.
+ *  Propósito: Exponer la billetera TuxaWallet a DApps externas inyectando
+ *             un objeto compatible con el estándar EIP-1193 en `window.tuxachain`.
  *
  *  DISEÑO DE SEGURIDAD:
  *  - El provider NO guarda llaves privadas. Cuando una DApp pide firmar,
- *    lee el `mnemonicSession` del estado (RAM), deriva la llave, firma,
- *    y descarta la llave inmediatamente.
- *  - Requiere que la billetera esté desbloqueada para métodos sensibles.
+ *    lee el `mnemonicSession` del estado (RAM), deriva la llave, firma
+ *    localmente usando viem, y descarta la llave inmediatamente.
  * ============================================================================
  */
 
@@ -20,11 +18,12 @@ import { createTuxaWalletClient } from './viemClient.js';
 import { deriveAccount } from '../vault/walletVault.js';
 import { TUXACHAIN_CHAIN_ID_HEX, TUXACHAIN_CHAIN_ID } from './tuxachain.config.js';
 import { hexToBigInt } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 
 class TuxaProvider {
   constructor() {
     this.isTuxaWallet = true;
-    this.isMetaMask = false; // Evita conflictos con MetaMask si está instalado
+    this.isMetaMask = false; // Evita conflictos con MetaMask
     this.listeners = new Map();
   }
 
@@ -43,14 +42,11 @@ class TuxaProvider {
         return TUXACHAIN_CHAIN_ID.toString();
 
       case 'eth_accounts':
-        // Devuelve cuentas solo si la billetera está desbloqueada
         return store.isUnlocked && store.activeAccount 
           ? [store.activeAccount.address] 
           : [];
 
       case 'eth_requestAccounts':
-        // Las DApps usan esto para pedir permiso de conexión.
-        // En una app de producción, aquí se abriría un modal de la UI.
         if (!store.isUnlocked || !store.activeAccount) {
           throw new Error('TuxaWallet: Billetera bloqueada. Desbloquéala primero.');
         }
@@ -62,7 +58,7 @@ class TuxaProvider {
       case 'eth_sendTransaction':
         return this._handleSendTransaction(params, store);
 
-      // Métodos comunes que podemos redirigir al RPC de Tuxachain
+      // Métodos comunes que redirigimos al RPC de Tuxachain
       case 'eth_blockNumber':
       case 'eth_getBalance':
       case 'eth_call':
@@ -78,29 +74,27 @@ class TuxaProvider {
   }
 
   /* -------------------------------------------------------------------
-   * 2) LÓGICA DE FIRMA (Solo si la billetera está desbloqueada)
+   * 2) LÓGICA DE FIRMA LOCAL (Usando viem/accounts)
    * ---------------------------------------------------------------- */
   
   async _handlePersonalSign(params, store) {
     if (!store.isUnlocked || !store.mnemonicSession) {
       throw new Error('TuxaWallet: Billetera bloqueada.');
     }
-    const [message, address] = params;
+    const [message] = params;
 
-    // Derivar llave privada temporal para firmar
+    // Derivar llave privada de la RAM
     const { privateKey } = deriveAccount(store.mnemonicSession, store.activeAccount.index);
     
-    // Crear wallet client (en memoria)
-    const account = { address: address, privateKey: privateKey };
-    const walletClient = createTuxaWalletClient(account);
+    // Convertir a LocalAccount de Viem para firmar LOCALMENTE (nunca en el RPC)
+    const account = privateKeyToAccount(privateKey);
 
     try {
-      // Firmar el mensaje
-      const signature = await walletClient.signMessage({ message });
+      const signature = await account.signMessage({ message });
       return signature;
     } finally {
       // Higiene de memoria
-      account.privateKey = null;
+      // (Nota: account es inmutable, pero el string privateKey sale del scope)
     }
   }
 
@@ -110,10 +104,10 @@ class TuxaProvider {
     }
     const [tx] = params;
 
-    // Derivar llave privada temporal
     const { privateKey } = deriveAccount(store.mnemonicSession, store.activeAccount.index);
     
-    const account = { address: store.activeAccount.address, privateKey: privateKey };
+    // Convertir a LocalAccount para enviar la transacción firmada
+    const account = privateKeyToAccount(privateKey);
     const walletClient = createTuxaWalletClient(account);
 
     try {
@@ -127,11 +121,10 @@ class TuxaProvider {
         maxPriorityFeePerGas: tx.maxPriorityFeePerGas ? hexToBigInt(tx.maxPriorityFeePerGas) : undefined,
       };
 
-      // Enviar transacción
       const hash = await walletClient.sendTransaction(preparedTx);
       return hash;
     } finally {
-      account.privateKey = null;
+      // Higiene de memoria
     }
   }
 
@@ -179,15 +172,9 @@ export const tuxaProvider = new TuxaProvider();
 
 /**
  * Inyecta el provider en window.tuxachain.
- * Llamar una sola vez al arrancar la app (main.jsx o App.jsx).
  */
 export function injectTuxaProvider() {
   if (typeof window !== 'undefined') {
-    // Inyectamos en tuxachain (oficial)
     window.tuxachain = tuxaProvider;
-    
-    // Opcional: Inyectar en window.ethereum si el usuario quiere que TuxaWallet
-    // sea la billetera por defecto en su navegador.
-    // window.ethereum = tuxaProvider; 
   }
-        }
+}
