@@ -117,7 +117,7 @@ export const useWalletStore = create(
        * Añade una nueva cuenta derivada de la misma semilla.
        */
       addNewAccount: () => {
-        const { vaultBlob, mnemonicSession, isLoading } = get();
+        const { vaultBlob, mnemonicSession, isLoading, isUnlocked } = get();
         
         if (isLoading) return;
         if (!isUnlocked || !mnemonicSession) {
