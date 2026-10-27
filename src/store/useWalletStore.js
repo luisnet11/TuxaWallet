@@ -14,12 +14,14 @@
  *    la derivación PBKDF2 (600k iteraciones ~0.5s en móviles).
  * ============================================================================
  */
+
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { parseEther, parseUnits, formatUnits } from 'viem';
+import { parseEther, parseUnits, formatUnits, formatEther, isAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
   createNewWallet,
+  importWalletFromMnemonic,
   unlockWallet,
   addAccountToWallet,
   deriveAccount,
@@ -36,19 +38,51 @@ export const useWalletStore = create(
       isLoading: false,
       error: null,
       trackedTokens: [],
+      
+      // Guardado temporal para el flujo de creación
+      pendingWallet: null,
 
+      // 1. Preparar la billetera (No guarda en localStorage aún)
       createWallet: async (password) => {
         set({ isLoading: true, error: null });
         try {
           const { vaultBlob, mnemonic } = await createNewWallet(password, 24);
           set({
-            vaultBlob,
-            isUnlocked: true,
+            pendingWallet: vaultBlob,
             mnemonicSession: mnemonic,
-            activeAccount: vaultBlob.accounts[0],
             isLoading: false,
           });
           return mnemonic;
+        } catch (err) {
+          set({ isLoading: false, error: err.message });
+          throw err;
+        }
+      },
+
+      // 2. El usuario confirma que anotó las palabras. AHORA sí guardamos.
+      confirmWallet: () => {
+        const { pendingWallet, mnemonicSession } = get();
+        if (pendingWallet && mnemonicSession) {
+          set({
+            vaultBlob: pendingWallet,
+            pendingWallet: null,
+            isUnlocked: true,
+            activeAccount: pendingWallet.accounts[0],
+          });
+        }
+      },
+
+      importExistingWallet: async (mnemonic, password) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { vaultBlob, mnemonic: cleanMnemonic } = await importWalletFromMnemonic(mnemonic, password);
+          set({
+            vaultBlob,
+            isUnlocked: true,
+            mnemonicSession: cleanMnemonic,
+            activeAccount: vaultBlob.accounts[0],
+            isLoading: false,
+          });
         } catch (err) {
           set({ isLoading: false, error: err.message });
           throw err;
@@ -116,7 +150,8 @@ export const useWalletStore = create(
         try {
           const client = getTuxaPublicClient();
           const balanceWei = await client.getBalance({ address: activeAccount.address });
-          return (Number(balanceWei) / 1e18).toFixed(6);
+          // CORRECCIÓN: Usar formatEther para no perder precisión
+          return formatEther(balanceWei);
         } catch (err) {
           console.error(err);
           return '0';
@@ -175,6 +210,11 @@ export const useWalletStore = create(
           set({ error: 'Billetera bloqueada.' });
           return;
         }
+        // CORRECCIÓN: Validar dirección
+        if (!isAddress(toAddress)) {
+          set({ error: 'Dirección de destino inválida.' });
+          throw new Error('Dirección de destino inválida.');
+        }
 
         set({ isLoading: true, error: null });
         try {
@@ -183,34 +223,19 @@ export const useWalletStore = create(
           const walletClient = createTuxaWalletClient(account);
           const publicClient = getTuxaPublicClient();
 
-          const baseTx = {
-            to: toAddress,
-            value: parseEther(amountEther),
-            type: 'legacy',
-          };
-
+          const baseTx = { to: toAddress, value: parseEther(amountEther), type: 'legacy' };
           const preparedTx = await publicClient.prepareTransactionRequest({
-            ...baseTx,
-            account,
-            chain: walletClient.chain,
+            ...baseTx, account, chain: walletClient.chain,
           });
 
           if (dryRun) {
             const signedTx = await walletClient.signTransaction(preparedTx);
             set({ isLoading: false });
-            return {
-              success: true,
-              hash: signedTx,
-              message: `✅ Firma exitosa (Dry Run) con tipo legacy y gas estimado.`,
-            };
+            return { success: true, hash: signedTx, message: `✅ Firma exitosa (Dry Run).` };
           } else {
             const hash = await walletClient.sendTransaction(preparedTx);
             set({ isLoading: false });
-            return {
-              success: true,
-              hash,
-              message: `✅ Transacción enviada a Tuxachain.`,
-            };
+            return { success: true, hash, message: `✅ Transacción enviada.` };
           }
         } catch (err) {
           const errorMsg = err.shortMessage || err.message || 'Error al enviar transacción.';
@@ -222,6 +247,11 @@ export const useWalletStore = create(
       sendERC20Token: async (tokenAddress, toAddress, amount, dryRun = false) => {
         const { isUnlocked, mnemonicSession, activeAccount, trackedTokens } = get();
         if (!isUnlocked || !mnemonicSession) throw new Error('Billetera bloqueada.');
+        // CORRECCIÓN: Validar dirección
+        if (!isAddress(toAddress)) {
+          set({ error: 'Dirección de destino inválida.' });
+          throw new Error('Dirección de destino inválida.');
+        }
 
         const token = trackedTokens.find(t => t.address === tokenAddress);
         if (!token) throw new Error('Token no encontrado en la lista.');
@@ -233,32 +263,19 @@ export const useWalletStore = create(
           const walletClient = createTuxaWalletClient(account);
 
           const parsedAmount = parseUnits(amount, token.decimals);
-
           const tx = {
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'transfer',
-            args: [toAddress, parsedAmount],
-            account,
-            type: 'legacy',
+            address: tokenAddress, abi: ERC20_ABI, functionName: 'transfer',
+            args: [toAddress, parsedAmount], account, type: 'legacy',
           };
 
           if (dryRun) {
             const signedTx = await walletClient.signTransaction(tx);
             set({ isLoading: false });
-            return {
-              success: true,
-              hash: signedTx,
-              message: `✅ Firma ERC-20 (${token.symbol}) exitosa (Dry Run).`,
-            };
+            return { success: true, hash: signedTx, message: `✅ Firma ERC-20 (${token.symbol}) exitosa (Dry Run).` };
           } else {
             const hash = await walletClient.writeContract(tx);
             set({ isLoading: false });
-            return {
-              success: true,
-              hash,
-              message: `✅ Transferencia de ${token.symbol} enviada.`,
-            };
+            return { success: true, hash, message: `✅ Transferencia de ${token.symbol} enviada.` };
           }
         } catch (err) {
           const errorMsg = err.shortMessage || err.message || 'Error al enviar token.';

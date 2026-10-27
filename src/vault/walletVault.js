@@ -2,12 +2,9 @@
  * ============================================================================
  *  TUXAWALLET — Orquestador de Billeteras (Wallet Vault)
  * ============================================================================
- *  Archivo:   src/vault/walletVault.js
- *  Propósito: Generación BIP-39 y derivación HD con cifrado AES-GCM.
- * ============================================================================
  */
 
-import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { HDKey } from '@scure/bip32';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -20,7 +17,6 @@ import {
 } from './crypto.service.js';
 
 const EVM_DERIVATION_PATH = "m/44'/60'/0'/0";
-// AAD dinámico: Versión | Algoritmo-KDF | Iteraciones | walletId
 const AAD_PREFIX = 'v1|pbkdf2-sha256-600000';
 
 /* ---------------------------------------------------------------------------
@@ -34,7 +30,6 @@ export async function createNewWallet(password, numWords = 24) {
   const salt = generateSalt();
   const key = await deriveKey(password, salt);
 
-  // Fix de auditoría: AAD compuesto
   const aad = `${AAD_PREFIX}|${walletId}`;
   const encrypted = await encryptData(mnemonic, key, aad);
 
@@ -54,26 +49,49 @@ export async function createNewWallet(password, numWords = 24) {
 }
 
 /* ---------------------------------------------------------------------------
- * 2) DESBLOQUEO DE BILLETERA EXISTENTE
+ * 2) IMPORTAR BILLETERA DESDE SEMILLA
+ * ------------------------------------------------------------------------ */
+export async function importWalletFromMnemonic(mnemonic, password) {
+  const cleanMnemonic = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
+  
+  // CORRECCIÓN CRÍTICA: Validar que la semilla sea real y no tenga errores tipográficos
+  if (!validateMnemonic(cleanMnemonic, wordlist)) {
+    throw new Error('Frase semilla inválida. Verifica que las palabras estén bien escritas.');
+  }
+
+  const walletId = crypto.randomUUID();
+  const salt = generateSalt();
+  const key = await deriveKey(password, salt);
+  const aad = `${AAD_PREFIX}|${walletId}`;
+  const encrypted = await encryptData(cleanMnemonic, key, aad);
+
+  const firstAccount = deriveAccount(cleanMnemonic, 0);
+
+  const vaultBlob = {
+    version: 1,
+    id: walletId,
+    salt: salt,
+    iv: encrypted.iv,
+    ciphertext: encrypted.ciphertext,
+    accounts: [{ index: 0, address: firstAccount.address }],
+    createdAt: Date.now(),
+  };
+
+  return { vaultBlob, mnemonic: cleanMnemonic };
+}
+
+/* ---------------------------------------------------------------------------
+ * 3) DESBLOQUEO DE BILLETERA EXISTENTE
  * ------------------------------------------------------------------------ */
 export async function unlockWallet(vaultBlob, password) {
   const key = await deriveKey(password, vaultBlob.salt);
-
-  // Fix de auditoría: Reconstruir el mismo AAD compuesto
   const aad = `${AAD_PREFIX}|${vaultBlob.id}`;
-
-  const mnemonic = await decryptData(
-    vaultBlob.ciphertext,
-    key,
-    vaultBlob.iv,
-    aad 
-  );
-
+  const mnemonic = await decryptData(vaultBlob.ciphertext, key, vaultBlob.iv, aad);
   return { mnemonic, key };
 }
 
 /* ---------------------------------------------------------------------------
- * 3) DERIVACIÓN DE CUENTAS (MULTI-CUENTA)
+ * 4) DERIVACIÓN DE CUENTAS
  * ------------------------------------------------------------------------ */
 export function deriveAccount(mnemonic, index) {
   const seed = mnemonicToSeedSync(mnemonic);
@@ -99,15 +117,13 @@ export function deriveAccount(mnemonic, index) {
 }
 
 /* ---------------------------------------------------------------------------
- * 4) AGREGAR NUEVA CUENTA AL VAULT BLOB
+ * 5) AGREGAR NUEVA CUENTA
  * ------------------------------------------------------------------------ */
 export function addAccountToWallet(vaultBlob, mnemonic, nextIndex) {
   const newAccount = deriveAccount(mnemonic, nextIndex);
-
   if (vaultBlob.accounts.some((a) => a.index === nextIndex)) {
     throw new Error(`[TuxaWallet] La cuenta con índice ${nextIndex} ya existe.`);
   }
-
   return {
     ...vaultBlob,
     accounts: [
