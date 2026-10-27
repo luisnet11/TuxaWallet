@@ -10,10 +10,11 @@
 
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  // Plugin oficial de React (JSX, Fast Refresh en dev).
-  plugins: [react()],
+  // Plugin oficial de React (JSX, Fast Refresh en dev) + Tailwind CSS v4 (daisyUI).
+  plugins: [react(), tailwindcss()],
 
   // Base raíz. Cuando se compile para Capacitor (APK), se ajustará a './'.
   base: '/',

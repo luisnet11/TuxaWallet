@@ -10,18 +10,21 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/core": "^6.2.0",
+    "@scure/bip32": "^1.5.0",
+    "@scure/bip39": "^1.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "viem": "^2.21.0",
-    "zustand": "^5.0.1",
-    "@capacitor/core": "^6.2.0",
-    "@scure/bip39": "^1.4.0",
-    "@scure/bip32": "^1.5.0"
+    "zustand": "^5.0.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^4.3.3",
+    "daisyui": "^5.7.50",
+    "tailwindcss": "^4.3.3",
     "vite": "^5.4.10"
   }
 }

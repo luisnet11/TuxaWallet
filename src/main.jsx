@@ -13,6 +13,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import './index.css';
 
 // Localiza el punto de montaje definido en index.html.
 // Si no existe, lanzamos un error explícito en lugar de fallar silenciosamente.
