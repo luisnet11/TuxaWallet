@@ -2,9 +2,6 @@
  * ============================================================================
  *  TUXAWALLET — Orquestador de Billeteras (Wallet Vault)
  * ============================================================================
- *  Archivo:   src/vault/walletVault.js
- *  Propósito: Generación BIP-39 y derivación HD con cifrado AES-GCM.
- * ============================================================================
  */
 
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
@@ -12,31 +9,64 @@ import { wordlist } from '@scure/bip39/wordlists/english';
 import { HDKey } from '@scure/bip32';
 import { privateKeyToAccount } from 'viem/accounts';
 import { bytesToHex } from 'viem';
-import { generateSalt, deriveKey, encryptData, decryptData } from './crypto.service.js';
+import {
+  generateSalt,
+  deriveKey,
+  encryptData,
+  decryptData,
+} from './crypto.service.js';
 
 const EVM_DERIVATION_PATH = "m/44'/60'/0'/0";
 const AAD_PREFIX = 'v1|pbkdf2-sha256-600000';
 
-// ... (createNewWallet y unlockWallet se mantienen igual)
+/* ---------------------------------------------------------------------------
+ * 1) GENERACIÓN DE NUEVA BILLETERA
+ * ------------------------------------------------------------------------ */
+export async function createNewWallet(password, numWords = 24) {
+  const strength = numWords === 24 ? 256 : 128;
+  const mnemonic = generateMnemonic(wordlist, strength);
+  const walletId = crypto.randomUUID();
 
+  const salt = generateSalt();
+  const key = await deriveKey(password, salt);
+
+  const aad = `${AAD_PREFIX}|${walletId}`;
+  const encrypted = await encryptData(mnemonic, key, aad);
+
+  const firstAccount = deriveAccount(mnemonic, 0);
+
+  const vaultBlob = {
+    version: 1,
+    id: walletId,
+    salt: salt,
+    iv: encrypted.iv,
+    ciphertext: encrypted.ciphertext,
+    accounts: [{ index: 0, address: firstAccount.address }],
+    createdAt: Date.now(),
+  };
+
+  return { vaultBlob, mnemonic };
+}
+
+/* ---------------------------------------------------------------------------
+ * 2) IMPORTAR BILLETERA DESDE SEMILLA
+ * ------------------------------------------------------------------------ */
 export async function importWalletFromMnemonic(mnemonic, password) {
-  // 1. Validar que la semilla sea correcta (BIP-39)
   const cleanMnemonic = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
+  
+  // CORRECCIÓN CRÍTICA: Validar que la semilla sea real y no tenga errores tipográficos
   if (!validateMnemonic(cleanMnemonic, wordlist)) {
-    throw new Error('Frase semilla inválida. Verifica las palabras.');
+    throw new Error('Frase semilla inválida. Verifica que las palabras estén bien escritas.');
   }
 
-  // 2. Cifrar la semilla con la nueva contraseña
   const walletId = crypto.randomUUID();
   const salt = generateSalt();
   const key = await deriveKey(password, salt);
   const aad = `${AAD_PREFIX}|${walletId}`;
   const encrypted = await encryptData(cleanMnemonic, key, aad);
 
-  // 3. Derivar la primera cuenta
   const firstAccount = deriveAccount(cleanMnemonic, 0);
 
-  // 4. Construir el Vault Blob
   const vaultBlob = {
     version: 1,
     id: walletId,
@@ -50,13 +80,28 @@ export async function importWalletFromMnemonic(mnemonic, password) {
   return { vaultBlob, mnemonic: cleanMnemonic };
 }
 
+/* ---------------------------------------------------------------------------
+ * 3) DESBLOQUEO DE BILLETERA EXISTENTE
+ * ------------------------------------------------------------------------ */
+export async function unlockWallet(vaultBlob, password) {
+  const key = await deriveKey(password, vaultBlob.salt);
+  const aad = `${AAD_PREFIX}|${vaultBlob.id}`;
+  const mnemonic = await decryptData(vaultBlob.ciphertext, key, vaultBlob.iv, aad);
+  return { mnemonic, key };
+}
+
+/* ---------------------------------------------------------------------------
+ * 4) DERIVACIÓN DE CUENTAS
+ * ------------------------------------------------------------------------ */
 export function deriveAccount(mnemonic, index) {
   const seed = mnemonicToSeedSync(mnemonic);
   const hdkey = HDKey.fromMasterSeed(seed);
   const path = `${EVM_DERIVATION_PATH}/${index}`;
   const child = hdkey.derive(path);
 
-  if (!child.privateKey) throw new Error('[TuxaWallet] Fallo al derivar llave privada.');
+  if (!child.privateKey) {
+    throw new Error('[TuxaWallet] Fallo al derivar llave privada.');
+  }
 
   const privateKeyHex = bytesToHex(child.privateKey);
   const account = privateKeyToAccount(privateKeyHex);
@@ -64,9 +109,16 @@ export function deriveAccount(mnemonic, index) {
   seed.fill(0);
   child.privateKey.fill(0);
 
-  return { index, address: account.address, privateKey: privateKeyHex };
+  return {
+    index,
+    address: account.address,
+    privateKey: privateKeyHex,
+  };
 }
 
+/* ---------------------------------------------------------------------------
+ * 5) AGREGAR NUEVA CUENTA
+ * ------------------------------------------------------------------------ */
 export function addAccountToWallet(vaultBlob, mnemonic, nextIndex) {
   const newAccount = deriveAccount(mnemonic, nextIndex);
   if (vaultBlob.accounts.some((a) => a.index === nextIndex)) {
@@ -74,6 +126,9 @@ export function addAccountToWallet(vaultBlob, mnemonic, nextIndex) {
   }
   return {
     ...vaultBlob,
-    accounts: [...vaultBlob.accounts, { index: newAccount.index, address: newAccount.address }],
+    accounts: [
+      ...vaultBlob.accounts,
+      { index: newAccount.index, address: newAccount.address },
+    ],
   };
 }
