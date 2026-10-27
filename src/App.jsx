@@ -1,20 +1,7 @@
-/**
- * ============================================================================
- *  TUXAWALLET — Panel de Pruebas End-to-End (TEMPORAL)
- * ============================================================================
- *  Archivo:   src/App.jsx
- *  Propósito: Validar el flujo completo de la billetera (crear, bloquear,
- *             desbloquear, derivar cuentas, consultar saldo) antes de que
- *             el chat de UI traiga el diseño definitivo.
- *
- *  ⚠️ ESTILOS INLINE BÁSICOS: No usar Tailwind ni daisyUI aquí. Solo
- *     lo mínimo para probar la lógica.
- * ============================================================================
- */
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWalletStore } from './store/useWalletStore.js';
 import { validatePasswordStrength } from './vault/crypto.service.js';
+import { injectTuxaProvider } from './services/walletProvider.js';
 
 const styles = {
   container: { padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto', lineHeight: 1.5 },
@@ -22,8 +9,8 @@ const styles = {
   input: { width: '100%', padding: '8px', margin: '8px 0', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #ccc' },
   button: { padding: '10px 15px', background: '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '5px', marginTop: '5px' },
   buttonDanger: { padding: '10px 15px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '5px' },
+  buttonBlue: { padding: '10px 15px', background: '#1976d2', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '5px' },
   error: { color: 'red', fontSize: '0.9em', marginTop: '5px' },
-  success: { color: 'green', fontWeight: 'bold' },
   mnemonicBox: { background: '#fff3cd', border: '1px solid #ffeeba', padding: '10px', borderRadius: '4px', fontFamily: 'monospace', wordSpacing: '4px' }
 };
 
@@ -38,8 +25,12 @@ export default function App() {
   const [newMnemonic, setNewMnemonic] = useState(null);
   const [balance, setBalance] = useState(null);
   const [localError, setLocalError] = useState('');
+  const [dappResult, setDappResult] = useState('');
 
-  // --- MANEJADORES ---
+  // Inyectar el provider al arrancar la app (simula una extensión de navegador)
+  useEffect(() => {
+    injectTuxaProvider();
+  }, []);
 
   const handleCreate = async () => {
     setLocalError('');
@@ -53,9 +44,7 @@ export default function App() {
       const mnemonic = await createWallet(password);
       setNewMnemonic(mnemonic);
       setPassword('');
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleUnlock = async () => {
@@ -64,40 +53,47 @@ export default function App() {
     try {
       await unlockExistingWallet(password);
       setPassword('');
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleLock = () => {
     lockWallet();
     setNewMnemonic(null);
     setBalance(null);
+    setDappResult('');
   };
 
-  const handleAddAccount = () => {
-    addNewAccount();
-    setBalance(null);
-  };
-
-  const handleFetchBalance = async () => {
-    setLocalError('');
-    setBalance('Consultando RPC...');
+  // --- SIMULADOR DE DAPP ---
+  const simulateDappConnect = async () => {
+    setDappResult('Conectando...');
     try {
-      const bal = await fetchActiveAccountBalance();
-      setBalance(bal);
+      // Simula lo que haría una DApp: window.ethereum.request
+      const accounts = await window.tuxachain.request({ method: 'eth_requestAccounts' });
+      setDappResult(`DApp conectada con éxito. Cuentas: ${accounts.join(', ')}`);
     } catch (err) {
-      setBalance('Error al consultar');
+      setDappResult(`Error DApp: ${err.message}`);
     }
   };
 
-  // --- RENDERIZADO ---
+  const simulateDappSign = async () => {
+    setDappResult('Firmando mensaje...');
+    try {
+      const msg = "Hola desde la DApp de prueba";
+      const accounts = await window.tuxachain.request({ method: 'eth_requestAccounts' });
+      const sig = await window.tuxachain.request({ 
+        method: 'personal_sign', 
+        params: [msg, accounts[0]] 
+      });
+      setDappResult(`Firma exitosa: ${sig.slice(0, 30)}...`);
+    } catch (err) {
+      setDappResult(`Error DApp: ${err.message}`);
+    }
+  };
 
   return (
     <div style={styles.container}>
-      <h1>TuxaWallet — Pruebas End-to-End</h1>
+      <h1>TuxaWallet — Pruebas</h1>
 
-      {/* Mostrar errores del store o locales */}
       {(error || localError) && (
         <div style={styles.error}>
           <strong>Error:</strong> {localError || error}
@@ -105,14 +101,12 @@ export default function App() {
         </div>
       )}
 
-      {/* --- ESTADO 1: CARGANDO --- */}
       {isLoading && (
         <div style={styles.card}>
           <p>⏳ Derivando claves (PBKDF2 600k iteraciones)... Por favor espera.</p>
         </div>
       )}
 
-      {/* --- ESTADO 2: BLOQUEADO --- */}
       {!isUnlocked && !isLoading && (
         <div style={styles.card}>
           <h2>{vaultBlob ? 'Desbloquear Billetera' : 'Crear Nueva Billetera'}</h2>
@@ -134,10 +128,8 @@ export default function App() {
         </div>
       )}
 
-      {/* --- ESTADO 3: DESBLOQUEADO --- */}
       {isUnlocked && !isLoading && (
         <>
-          {/* Alerta de respaldo de semilla (solo al crear) */}
           {newMnemonic && (
             <div style={styles.card}>
               <h3 style={{ color: 'red' }}>⚠️ Anota estas 24 palabras</h3>
@@ -160,7 +152,11 @@ export default function App() {
                 <span>---</span>
               )}
               <br/>
-              <button style={styles.button} onClick={handleFetchBalance}>Consultar Saldo en Red</button>
+              <button style={styles.button} onClick={async () => {
+                setBalance('Consultando...');
+                const bal = await fetchActiveAccountBalance();
+                setBalance(bal);
+              }}>Consultar Saldo en Red</button>
             </div>
           </div>
 
@@ -173,7 +169,25 @@ export default function App() {
                 </li>
               ))}
             </ul>
-            <button style={styles.button} onClick={handleAddAccount}>+ Añadir Nueva Cuenta</button>
+            <button style={styles.button} onClick={addNewAccount}>+ Añadir Nueva Cuenta</button>
+          </div>
+
+          {/* SIMULADOR DE DAPP */}
+          <div style={{...styles.card, borderColor: '#1976d2', background: '#e3f2fd'}}>
+            <h3 style={{ color: '#1976d2', marginTop: 0 }}>🔌 Simulador de DApp (EIP-1193)</h3>
+            <p style={{ fontSize: '0.9em' }}>Prueba cómo una DApp externa interactúa con TuxaWallet.</p>
+            
+            <div style={{ marginBottom: '10px' }}>
+              <button style={styles.buttonBlue} onClick={simulateDappConnect}>Simular Conexión DApp</button>
+              <button style={styles.buttonBlue} onClick={simulateDappSign}>Simular Firma de Mensaje</button>
+            </div>
+
+            {dappResult && (
+              <div style={{ background: '#fff', padding: '10px', borderRadius: '4px', border: '1px solid #90caf9', wordBreak: 'break-all', fontSize: '0.9em' }}>
+                <strong>Respuesta del Provider:</strong><br/>
+                {dappResult}
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: '20px' }}>
@@ -183,4 +197,4 @@ export default function App() {
       )}
     </div>
   );
-          }
+}
