@@ -117,6 +117,17 @@ export const useWalletStore = create(
         });
       },
 
+resetWallet: () => {
+  set({
+    vaultBlob: null,
+    isUnlocked: false,
+    mnemonicSession: null,
+    activeAccount: null,
+    trackedTokens: [],
+    pendingWallet: null,
+    error: null,
+  });
+},
       addNewAccount: () => {
         const { vaultBlob, mnemonicSession, isLoading, isUnlocked } = get();
         if (isLoading) return;
