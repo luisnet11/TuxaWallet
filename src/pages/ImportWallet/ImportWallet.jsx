@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { validatePasswordStrength } from '../../vault/crypto.service.js';
@@ -6,18 +6,24 @@ import PasswordInput from '../../components/PasswordInput.jsx';
 
 export default function ImportWallet() {
   const navigate = useNavigate();
-  const { importExistingWallet, isLoading, error, clearError } = useWalletStore();
+  const { importExistingWallet, isLoading, error, clearError, vaultBlob } = useWalletStore();
 
   const [mnemonic, setMnemonic] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState('');
 
-  // Validaciones
+  // SEGURIDAD: Si ya hay una billetera, alertar y redirigir
+  useEffect(() => {
+    if (vaultBlob) {
+      alert('Ya tienes una billetera creada en este dispositivo. Por seguridad, no puedes crear otra sin borrar la actual.');
+      navigate('/welcome');
+    }
+  }, [vaultBlob, navigate]);
+
   const validation = validatePasswordStrength(password);
   const passwordsMatch = password === confirmPassword && password.length > 0;
   
-  // Validar palabras (solo por conteo para UX, el store hace la validación real)
   const words = mnemonic.trim().split(/\s+/).filter(w => w.length > 0);
   const isValidWordCount = words.length === 12 || words.length === 24;
 
@@ -41,7 +47,6 @@ export default function ImportWallet() {
       await importExistingWallet(mnemonic, password);
       navigate('/dashboard');
     } catch (err) {
-      // El error se maneja en el store (semilla inválida o error de cifrado)
       console.error(err);
     }
   };
@@ -49,7 +54,7 @@ export default function ImportWallet() {
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-6">
       <div className="w-full max-w-md">
-        <button onClick={() => navigate('/welcome')} className="text-gray-400 hover:text-white mb-6">← Atrás</button>
+        <button onClick={() => navigate('/welcome')} className="text-gray-400 hover:text-purple-400 mb-6 transition-colors">← Atrás</button>
         <h1 className="text-3xl font-bold mb-2">Importar billetera</h1>
         <p className="text-gray-400 mb-6 text-sm">
           Ingresa tu frase de recuperación de 12 o 24 palabras.
@@ -64,7 +69,7 @@ export default function ImportWallet() {
         <div className="mb-4">
           <div className="flex justify-between items-end mb-2">
             <label className="block text-sm font-medium text-gray-300">Frase secreta</label>
-            <button onClick={handlePaste} className="text-xs text-purple-400 hover:text-purple-300">
+            <button onClick={handlePaste} className="text-xs text-purple-400 hover:text-purple-300 font-semibold">
               Pegar del portapapeles
             </button>
           </div>
@@ -95,9 +100,8 @@ export default function ImportWallet() {
           isValid={passwordsMatch}
         />
 
-        {/* Requisitos */}
-        <div className="bg-gray-900 p-4 rounded-lg mb-6 mt-2">
-          <p className="text-xs text-gray-400 mb-2">Requisitos de la contraseña:</p>
+        <div className="bg-gray-900/50 border border-gray-800 p-4 rounded-lg mb-6 mt-2">
+          <p className="text-xs text-gray-400 mb-2 font-semibold">Requisitos de la contraseña:</p>
           <ul className="text-xs space-y-1">
             {validation.errors.length === 0 ? (
               <li className="text-green-400">✓ Todos los requisitos cumplidos</li>
@@ -115,11 +119,11 @@ export default function ImportWallet() {
         <button
           onClick={handleImport}
           disabled={!isFormValid || isLoading}
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? 'Importando billetera...' : 'Importar Billetera'}
         </button>
       </div>
     </div>
   );
-      }
+}
