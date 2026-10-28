@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { validatePasswordStrength } from '../../vault/crypto.service.js';
@@ -6,15 +6,22 @@ import PasswordInput from '../../components/PasswordInput.jsx';
 
 export default function CreateWallet() {
   const navigate = useNavigate();
-  const { createWallet, confirmWallet, isLoading, error, clearError } = useWalletStore();
+  const { createWallet, confirmWallet, isLoading, error, clearError, vaultBlob } = useWalletStore();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [mnemonic, setMnemonic] = useState(null); // Se llena tras crear
+  const [mnemonic, setMnemonic] = useState(null);
   const [hasSaved, setHasSaved] = useState(false);
   const [localError, setLocalError] = useState('');
 
-  // Validaciones
+  // SEGURIDAD: Si ya hay una billetera, alertar y redirigir
+  useEffect(() => {
+    if (vaultBlob) {
+      alert('Ya tienes una billetera creada en este dispositivo. Por seguridad, no puedes crear otra sin borrar la actual.');
+      navigate('/welcome');
+    }
+  }, [vaultBlob, navigate]);
+
   const validation = validatePasswordStrength(password);
   const passwordsMatch = password === confirmPassword && password.length > 0;
   const isFormValid = validation.valid && passwordsMatch;
@@ -33,24 +40,21 @@ export default function CreateWallet() {
   };
 
   const handleConfirmBackup = () => {
-  if (hasSaved) {
-    confirmWallet(); // Guarda en localStorage
-    
-    // HIGIENE DE MEMORIA: Eliminar la semilla de la RAM
-    setMnemonic(null);
-    setPassword('');
-    setConfirmPassword('');
-    
-    navigate('/dashboard');
-  }
-};
+    if (hasSaved) {
+      confirmWallet();
+      // Higiene de memoria
+      setMnemonic(null);
+      setPassword('');
+      setConfirmPassword('');
+      navigate('/dashboard'); // Próximamente lo crearemos
+    }
+  };
 
-  // --- FLUJO 1: MOSTRAR CONTRASEÑA ---
   if (!mnemonic) {
     return (
       <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-6">
         <div className="w-full max-w-md">
-          <button onClick={() => navigate('/welcome')} className="text-gray-400 hover:text-white mb-6">← Atrás</button>
+          <button onClick={() => navigate('/welcome')} className="text-gray-400 hover:text-purple-400 mb-6 transition-colors">← Atrás</button>
           <h1 className="text-3xl font-bold mb-2">Crea una contraseña</h1>
           <p className="text-gray-400 mb-8 text-sm">
             Crea una contraseña para cifrar tu billetera en este dispositivo. La necesitarás cada vez que la desbloquees.
@@ -77,9 +81,8 @@ export default function CreateWallet() {
             isValid={passwordsMatch}
           />
 
-          {/* Requisitos */}
-          <div className="bg-gray-900 p-4 rounded-lg mb-6">
-            <p className="text-xs text-gray-400 mb-2">Requisitos de la contraseña:</p>
+          <div className="bg-gray-900/50 border border-gray-800 p-4 rounded-lg mb-6">
+            <p className="text-xs text-gray-400 mb-2 font-semibold">Requisitos de la contraseña:</p>
             <ul className="text-xs space-y-1">
               {validation.errors.length === 0 ? (
                 <li className="text-green-400">✓ Todos los requisitos cumplidos</li>
@@ -97,7 +100,7 @@ export default function CreateWallet() {
           <button
             onClick={handleCreate}
             disabled={!isFormValid || isLoading}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? 'Creando billetera...' : 'Crear Billetera'}
           </button>
@@ -106,7 +109,7 @@ export default function CreateWallet() {
     );
   }
 
-  // --- FLUJO 2: MOSTRAR SEMILLA ---
+  // --- FLUJO 2: MOSTRAR SEMILLA (CON DISEÑO MORADO Y AJUSTE DE TEXTO) ---
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-6">
       <div className="w-full max-w-md">
@@ -115,16 +118,17 @@ export default function CreateWallet() {
           Anota estas 24 palabras en un lugar seguro. Es la única forma de recuperar tu billetera.
         </p>
 
-        <div className="bg-gray-900 border border-yellow-600/50 rounded-xl p-4 mb-6 grid grid-cols-3 gap-2">
+        {/* Grid de palabras con fondo morado oscuro y texto adaptable */}
+        <div className="bg-purple-950/40 border border-purple-800/50 rounded-xl p-3 mb-6 grid grid-cols-3 gap-2">
           {mnemonic.split(' ').map((word, i) => (
-            <div key={i} className="bg-gray-800 p-2 rounded text-center text-sm">
-              <span className="text-gray-500 mr-1">{i + 1}.</span>
-              {word}
+            <div key={i} className="bg-purple-900/50 p-2 rounded flex items-center justify-center">
+              <span className="text-purple-400 text-xs mr-1 font-mono">{i + 1}.</span>
+              <span className="text-white text-xs font-medium break-all">{word}</span>
             </div>
           ))}
         </div>
 
-        <label className="flex items-center space-x-3 mb-6 cursor-pointer p-3 bg-gray-900 rounded-lg border border-gray-800 hover:border-purple-500 transition-colors">
+        <label className="flex items-center space-x-3 mb-6 cursor-pointer p-4 bg-gray-900 rounded-lg border border-gray-800 hover:border-purple-500 transition-colors">
           <input
             type="checkbox"
             checked={hasSaved}
@@ -137,11 +141,11 @@ export default function CreateWallet() {
         <button
           onClick={handleConfirmBackup}
           disabled={!hasSaved}
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Confirmar y Continuar
         </button>
       </div>
     </div>
   );
-          }
+}
