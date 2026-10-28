@@ -14,13 +14,14 @@ export default function CreateWallet() {
   const [hasSaved, setHasSaved] = useState(false);
   const [localError, setLocalError] = useState('');
 
-  // SEGURIDAD: Si ya hay una billetera, alertar y redirigir
-  useEffect(() => {
-    if (vaultBlob) {
-      alert('Ya tienes una billetera creada en este dispositivo. Por seguridad, no puedes crear otra sin borrar la actual.');
-      navigate('/welcome');
-    }
-  }, [vaultBlob, navigate]);
+// SEGURIDAD: Solo comprobar al entrar a la página (montaje)
+useEffect(() => {
+  const currentVault = useWalletStore.getState().vaultBlob;
+  if (currentVault) {
+    alert('Ya tienes una billetera creada en este dispositivo. Por seguridad, no puedes crear otra sin borrar la actual.');
+    navigate('/welcome');
+  }
+}, [navigate]);
 
   const validation = validatePasswordStrength(password);
   const passwordsMatch = password === confirmPassword && password.length > 0;
