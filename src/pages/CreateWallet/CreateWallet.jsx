@@ -33,11 +33,17 @@ export default function CreateWallet() {
   };
 
   const handleConfirmBackup = () => {
-    if (hasSaved) {
-      confirmWallet(); // Guarda en localStorage
-      navigate('/dashboard'); // Irá al dashboard (aún no existe, volverá a welcome)
-    }
-  };
+  if (hasSaved) {
+    confirmWallet(); // Guarda en localStorage
+    
+    // HIGIENE DE MEMORIA: Eliminar la semilla de la RAM
+    setMnemonic(null);
+    setPassword('');
+    setConfirmPassword('');
+    
+    navigate('/dashboard');
+  }
+};
 
   // --- FLUJO 1: MOSTRAR CONTRASEÑA ---
   if (!mnemonic) {
