@@ -6,7 +6,7 @@ import Welcome from './pages/Welcome/Welcome.jsx';
 import CreateWallet from './pages/CreateWallet/CreateWallet.jsx';
 import ImportWallet from './pages/ImportWallet/ImportWallet.jsx';
 import UnlockWallet from './pages/UnlockWallet/UnlockWallet.jsx';
-// import Dashboard from './pages/Dashboard/Dashboard.jsx'; // Pendiente
+import Dashboard from './pages/Dashboard/Dashboard.jsx'; // <-- NUEVO
 
 export default function App() {
   const { vaultBlob, isUnlocked } = useWalletStore();
@@ -23,14 +23,17 @@ export default function App() {
         <Route path="/create-wallet" element={<CreateWallet />} />
         <Route path="/import-wallet" element={<ImportWallet />} />
         
-        {/* Ruta de Desbloqueo (si hay billetera pero está cerrada) */}
+        {/* Ruta de Desbloqueo */}
         <Route 
           path="/unlock" 
           element={vaultBlob ? <UnlockWallet /> : <Navigate to="/welcome" replace />} 
         />
 
-        {/* Ruta del Dashboard (Próximamente) */}
-        {/* <Route path="/dashboard" element={isUnlocked ? <Dashboard /> : <Navigate to="/unlock" replace />} /> */}
+        {/* Ruta del Dashboard (Protegida) */}
+        <Route 
+          path="/dashboard" 
+          element={isUnlocked ? <Dashboard /> : <Navigate to="/unlock" replace />} 
+        />
 
         {/* Ruta Raíz: Redirección automática basada en el estado */}
         <Route 
@@ -38,7 +41,7 @@ export default function App() {
           element={
             !vaultBlob 
               ? <Navigate to="/welcome" replace /> 
-              : (!isUnlocked ? <Navigate to="/unlock" replace /> : <Navigate to="/welcome" replace />) // Temporal hasta que exista el Dashboard
+              : (!isUnlocked ? <Navigate to="/unlock" replace /> : <Navigate to="/dashboard" replace />)
           } 
         />
       </Routes>
