@@ -10,22 +10,22 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/core": "^8.6.0",
+    "@scure/bip32": "^2.4.0",
+    "@scure/bip39": "^2.4.0",
+    "lucide-react": "^1.66.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
-    "viem": "^2.21.0",
-    "zustand": "^5.0.1",
-    "@capacitor/core": "^6.2.0",
-    "@scure/bip39": "^1.4.0",
-    "@scure/bip32": "^1.5.0",
-    "lucide-react": "^0.468.0"
+    "viem": "^2.57.17",
+    "zustand": "^5.0.1"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.2.0",
-    "@tailwindcss/vite": "^4.3.3",
+    "@capacitor/cli": "^8.6.0",
+    "@tailwindcss/vite": "^4.3.5",
     "@vitejs/plugin-react": "^4.3.3",
     "daisyui": "^5.7.50",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "^4.3.5",
     "vite": "^5.4.10"
   }
 }
