@@ -15,6 +15,20 @@ import { classifyTransaction } from './transactionClassifier.js';
 const BLOCKSCOUT_API_URL = 'https://0x4e4542e3.explorer.aurora-cloud.dev/api/v2';
 
 /**
+ * Limpia el nombre del método para que sea legible en la UI.
+ * Si la API devuelve un hash (0x...) o un texto raro, lo reemplaza.
+ */
+function formatMethodName(method) {
+  if (!method) return 'Interacción';
+  // Si empieza por 0x o tiene una longitud muy larga (típico de hashes)
+  if (method.startsWith('0x') || method.length > 20) {
+    return 'Contrato';
+  }
+  // Capitalizar la primera letra (ej: transfer -> Transfer)
+  return method.charAt(0).toUpperCase() + method.slice(1);
+}
+
+/**
  * Obtiene el historial de transacciones de una dirección.
  * @param {string} address - Dirección EVM del usuario.
  * @returns {Promise<Array>} Lista de transacciones procesadas y clasificadas.
@@ -67,7 +81,8 @@ export async function fetchTransactionHistory(address) {
         to: tx.to?.hash || '',
         amount,
         symbol,
-        method: tx.method || 'Transfer',
+        // Usamos la nueva función para limpiar el nombre del método
+        method: formatMethodName(tx.method),
         isSender
       };
     });
@@ -77,4 +92,4 @@ export async function fetchTransactionHistory(address) {
     // En caso de error, devolvemos un array vacío para no romper la UI
     return [];
   }
-            }
+}
