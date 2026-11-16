@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Lock, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, 
   Zap, Home, Activity, Settings, Coins, Copy, Check, 
-  ChevronDown, Plus, Clock 
+  ChevronDown, Plus, WifiOff 
 } from 'lucide-react';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { fetchTransactionHistory } from '../../services/history.service.js';
@@ -45,7 +45,7 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Carga de datos con protección contra condiciones de carrera
+  // Carga de datos con protección contra condiciones de carrera y fallos individuales
   useEffect(() => {
     if (!activeAccount?.address) return;
     let isCancelled = false;
@@ -54,6 +54,7 @@ export default function Dashboard() {
       setIsLoading(true);
       
       try {
+        // Usamos allSettled para que si una API falla, las demás sigan funcionando
         const results = await Promise.allSettled([
           fetchActiveAccountBalance(),
           Promise.all(trackedTokens.map(token => fetchERC20Balance(token.address))),
@@ -64,10 +65,8 @@ export default function Dashboard() {
 
         if (isCancelled) return;
 
-        // 1. Saldo Nativo
         if (results[0].status === 'fulfilled') setEthBalance(results[0].value);
         
-        // 2. Saldos de Tokens
         if (results[1].status === 'fulfilled') {
           const newBalances = {};
           trackedTokens.forEach((token, i) => {
@@ -76,15 +75,14 @@ export default function Dashboard() {
           setTokenBalances(newBalances);
         }
 
-        // 3. Precios
         if (results[2].status === 'fulfilled') setPrices(results[2].value);
 
-        // 4. Historial (Con protección de entorno)
         if (results[3].status === 'fulfilled') {
           const realHistory = results[3].value;
           if (realHistory.length > 0) {
             setHistory(realHistory.slice(0, 3));
           } else if (import.meta.env.DEV) {
+             // Datos de prueba SOLO en desarrollo
              setHistory([
               { hash: '0x123', type: 'send', method: 'Transferencia', amount: '0.5', symbol: 'ETH', timestamp: new Date().toISOString(), isSender: true, status: 'ok', to: '0x8a...12f' }
              ]);
@@ -93,7 +91,6 @@ export default function Dashboard() {
           }
         }
 
-        // 5. Gas
         if (results[4].status === 'fulfilled') setGasStatus(results[4].value);
 
       } catch (error) {
@@ -105,7 +102,7 @@ export default function Dashboard() {
 
     loadData();
     return () => { isCancelled = true; };
-  }, [activeAccount?.address, trackedTokens.length]); // Se añade length para recargar al importar token
+  }, [activeAccount?.address, trackedTokens.length]);
 
   // PROTECCIÓN: No renderizar si no hay sesión
   if (!isUnlocked) return null;
@@ -138,16 +135,23 @@ export default function Dashboard() {
   const renderGasThermometer = () => {
     if (!gasStatus) return null;
     
-    // Estado Neutral si falla
+    // 1. API falló o la red no está configurada: Mantenemos el diseño verde, pero con un ícono sutil
     if (!gasStatus.success) {
-       return (
-        <div className="bg-gray-900/50 border border-white/10 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
-          <Clock size={24} className="text-gray-400 mb-2" />
-          <span className="text-xs font-bold text-gray-400 text-center">Gas: --</span>
+      return (
+        <div className="relative bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
+          <div className="absolute top-2 right-2 text-yellow-500" title="Sin conexión con API. Red gratis por defecto.">
+            <WifiOff size={12} />
+          </div>
+          <Zap size={24} className="text-green-400 mb-2" />
+          <span className="text-xs font-bold text-green-400 text-center">Gas Gratis</span>
+          <div className="w-full bg-gray-700/50 h-1.5 rounded-full mt-2">
+            <div className="bg-green-500 h-1.5 rounded-full" style={{ width: '100%' }}></div>
+          </div>
         </div>
       );
     }
 
+    // 2. API responde "Ilimitado"
     if (gasStatus.data?.tier === 'Unlimited') {
       return (
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
@@ -160,6 +164,7 @@ export default function Dashboard() {
       );
     }
 
+    // 3. API responde con un número límite
     const remaining = gasStatus.data.remainingFreeTransactions || 0;
     const percent = Math.min((remaining / 50) * 100, 100);
 
@@ -405,4 +410,4 @@ export default function Dashboard() {
       </nav>
     </div>
   );
-               }
+        }
