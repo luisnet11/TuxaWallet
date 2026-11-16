@@ -1,20 +1,3 @@
-/**
- * ============================================================================
- *  TUXAWALLET — Estado Global (Zustand)
- * ============================================================================
- *  Archivo:   src/store/useWalletStore.js
- *  Propósito: Gestionar el estado de la sesión, la persistencia del Vault
- *             Blob cifrado y la orquestación del walletVault.js.
- *
- *  DISEÑO DE SEGURIDAD:
- *  - Solo el `vaultBlob` cifrado se persiste en localStorage.
- *  - La frase semilla (`mnemonicSession`) y las llaves privadas viven en
- *    RAM. Al llamar a `lockWallet()`, se sobrescriben con null.
- *  - Estado `isLoading` para evitar congelamientos en UI móvil durante
- *    la derivación PBKDF2 (600k iteraciones ~0.5s en móviles).
- * ============================================================================
- */
-
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { parseEther, parseUnits, formatUnits, formatEther, isAddress } from 'viem';
@@ -27,6 +10,7 @@ import {
   deriveAccount,
 } from '../vault/walletVault.js';
 import { getTuxaPublicClient, createTuxaWalletClient, ERC20_ABI } from '../services/viemClient.js';
+import { DEFAULT_TOKENS } from '../config/tokens.config.js'; // NUEVO IMPORT
 
 export const useWalletStore = create(
   persist(
@@ -38,11 +22,8 @@ export const useWalletStore = create(
       isLoading: false,
       error: null,
       trackedTokens: [],
-      
-      // Guardado temporal para el flujo de creación
       pendingWallet: null,
 
-      // 1. Preparar la billetera (No guarda en localStorage aún)
       createWallet: async (password) => {
         set({ isLoading: true, error: null });
         try {
@@ -59,7 +40,6 @@ export const useWalletStore = create(
         }
       },
 
-      // 2. El usuario confirma que anotó las palabras. AHORA sí guardamos.
       confirmWallet: () => {
         const { pendingWallet, mnemonicSession } = get();
         if (pendingWallet && mnemonicSession) {
@@ -68,6 +48,7 @@ export const useWalletStore = create(
             pendingWallet: null,
             isUnlocked: true,
             activeAccount: pendingWallet.accounts[0],
+            trackedTokens: DEFAULT_TOKENS, // CARGAR TOKENS POR DEFECTO
           });
         }
       },
@@ -81,6 +62,7 @@ export const useWalletStore = create(
             isUnlocked: true,
             mnemonicSession: cleanMnemonic,
             activeAccount: vaultBlob.accounts[0],
+            trackedTokens: DEFAULT_TOKENS, // CARGAR TOKENS POR DEFECTO
             isLoading: false,
           });
         } catch (err) {
@@ -90,7 +72,7 @@ export const useWalletStore = create(
       },
 
       unlockExistingWallet: async (password) => {
-        const { vaultBlob } = get();
+        const { vaultBlob, trackedTokens } = get();
         if (!vaultBlob) throw new Error('No hay billetera.');
 
         set({ isLoading: true, error: null });
@@ -101,6 +83,8 @@ export const useWalletStore = create(
             mnemonicSession: mnemonic,
             activeAccount: vaultBlob.accounts[0],
             isLoading: false,
+            // Si la billetera es vieja y no tiene tokens, cargamos los por defecto
+            trackedTokens: trackedTokens.length === 0 ? DEFAULT_TOKENS : trackedTokens,
           });
         } catch (err) {
           set({ isLoading: false, error: 'Contraseña incorrecta o datos corruptos.' });
@@ -117,17 +101,18 @@ export const useWalletStore = create(
         });
       },
 
-resetWallet: () => {
-  set({
-    vaultBlob: null,
-    isUnlocked: false,
-    mnemonicSession: null,
-    activeAccount: null,
-    trackedTokens: [],
-    pendingWallet: null,
-    error: null,
-  });
-},
+      resetWallet: () => {
+        set({
+          vaultBlob: null,
+          isUnlocked: false,
+          mnemonicSession: null,
+          activeAccount: null,
+          trackedTokens: [],
+          pendingWallet: null,
+          error: null,
+        });
+      },
+
       addNewAccount: () => {
         const { vaultBlob, mnemonicSession, isLoading, isUnlocked } = get();
         if (isLoading) return;
@@ -161,7 +146,6 @@ resetWallet: () => {
         try {
           const client = getTuxaPublicClient();
           const balanceWei = await client.getBalance({ address: activeAccount.address });
-          // CORRECCIÓN: Usar formatEther para no perder precisión
           return formatEther(balanceWei);
         } catch (err) {
           console.error(err);
@@ -221,7 +205,6 @@ resetWallet: () => {
           set({ error: 'Billetera bloqueada.' });
           return;
         }
-        // CORRECCIÓN: Validar dirección
         if (!isAddress(toAddress)) {
           set({ error: 'Dirección de destino inválida.' });
           throw new Error('Dirección de destino inválida.');
@@ -258,7 +241,6 @@ resetWallet: () => {
       sendERC20Token: async (tokenAddress, toAddress, amount, dryRun = false) => {
         const { isUnlocked, mnemonicSession, activeAccount, trackedTokens } = get();
         if (!isUnlocked || !mnemonicSession) throw new Error('Billetera bloqueada.');
-        // CORRECCIÓN: Validar dirección
         if (!isAddress(toAddress)) {
           set({ error: 'Dirección de destino inválida.' });
           throw new Error('Dirección de destino inválida.');
