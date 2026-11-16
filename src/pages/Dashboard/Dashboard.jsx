@@ -1,29 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Lock, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, 
   Zap, Home, Activity, Settings, Coins, Copy, Check, 
-  ChevronDown, Plus 
+  ChevronDown, Plus, Clock 
 } from 'lucide-react';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { fetchTransactionHistory } from '../../services/history.service.js';
 import { fetchSponsoredGasStatus } from '../../services/gas.service.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
+import { TUXACHAIN_EXPLORER_URL } from '../../services/tuxachain.config.js';
 import TransactionIcon from '../../components/TransactionIcon.jsx';
 import AccountAvatar from '../../components/AccountAvatar.jsx';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { 
-    activeAccount, 
-    vaultBlob,
-    lockWallet, 
-    fetchActiveAccountBalance, 
-    trackedTokens, 
-    fetchERC20Balance,
-    setActiveAccount,
-    addNewAccount,
-    isUnlocked 
+    activeAccount, vaultBlob, lockWallet, fetchActiveAccountBalance, 
+    trackedTokens, fetchERC20Balance, setActiveAccount, addNewAccount, isUnlocked 
   } = useWalletStore();
 
   // Estados locales
@@ -38,62 +32,83 @@ export default function Dashboard() {
   // Estados de UI
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [copied, setCopied] = useState(false);
+  const menuRef = useRef(null);
 
+  // Cerrar menú al hacer clic fuera
   useEffect(() => {
-    if (!isUnlocked) navigate('/unlock');
-  }, [isUnlocked, navigate]);
-
-  // OPTIMIZACIÓN: Carga en paralelo con Promise.all
-  const loadData = async () => {
-    if (!activeAccount?.address) return;
-    setIsLoading(true);
-
-    try {
-      // Lanzamos todas las peticiones a la vez
-      const [
-        bal,
-        tokenBalsArray,
-        fetchedPrices,
-        realHistory,
-        gasData
-      ] = await Promise.all([
-        fetchActiveAccountBalance(),
-        Promise.all(trackedTokens.map(token => fetchERC20Balance(token.address))),
-        fetchTokenPrices(['native', ...trackedTokens.map(t => t.address)], 'usd'),
-        fetchTransactionHistory(activeAccount.address),
-        fetchSponsoredGasStatus(activeAccount.address)
-      ]);
-
-      // Procesar resultados
-      setEthBalance(bal);
-      
-      const newTokenBalances = {};
-      trackedTokens.forEach((token, index) => {
-        newTokenBalances[token.symbol] = tokenBalsArray[index];
-      });
-      setTokenBalances(newTokenBalances);
-      
-      setPrices(fetchedPrices);
-
-      const mockHistory = [
-        { hash: '0x123a', type: 'send', method: 'Transferencia', amount: '0.5', symbol: 'ETH', timestamp: new Date().toISOString(), isSender: true, status: 'ok', to: '0x8a...12f', from: activeAccount.address },
-        { hash: '0x456b', type: 'token_receive', method: 'Recepción', amount: '150.00', symbol: 'USDC', timestamp: new Date(Date.now() - 86400000).toISOString(), isSender: false, status: 'ok', to: activeAccount.address, from: '0x3c...9a1' },
-        { hash: '0x789c', type: 'swap', method: 'Intercambio', amount: '10.0', symbol: 'WNEAR', timestamp: new Date(Date.now() - 172800000).toISOString(), isSender: true, status: 'error', to: '0x1b...4c2', from: activeAccount.address }
-      ];
-
-      setHistory(realHistory.length > 0 ? realHistory.slice(0, 3) : mockHistory);
-      setGasStatus(gasData);
-
-    } catch (error) {
-      console.error("Error cargando datos", error);
-    } finally {
-      setIsLoading(false);
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowAccountMenu(false);
+      }
     }
-  };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
+  // Carga de datos con protección contra condiciones de carrera
   useEffect(() => {
+    if (!activeAccount?.address) return;
+    let isCancelled = false;
+    
+    const loadData = async () => {
+      setIsLoading(true);
+      
+      try {
+        const results = await Promise.allSettled([
+          fetchActiveAccountBalance(),
+          Promise.all(trackedTokens.map(token => fetchERC20Balance(token.address))),
+          fetchTokenPrices(['native', ...trackedTokens.map(t => t.address)], 'usd'),
+          fetchTransactionHistory(activeAccount.address),
+          fetchSponsoredGasStatus(activeAccount.address)
+        ]);
+
+        if (isCancelled) return;
+
+        // 1. Saldo Nativo
+        if (results[0].status === 'fulfilled') setEthBalance(results[0].value);
+        
+        // 2. Saldos de Tokens
+        if (results[1].status === 'fulfilled') {
+          const newBalances = {};
+          trackedTokens.forEach((token, i) => {
+            newBalances[token.symbol] = results[1].value[i];
+          });
+          setTokenBalances(newBalances);
+        }
+
+        // 3. Precios
+        if (results[2].status === 'fulfilled') setPrices(results[2].value);
+
+        // 4. Historial (Con protección de entorno)
+        if (results[3].status === 'fulfilled') {
+          const realHistory = results[3].value;
+          if (realHistory.length > 0) {
+            setHistory(realHistory.slice(0, 3));
+          } else if (import.meta.env.DEV) {
+             setHistory([
+              { hash: '0x123', type: 'send', method: 'Transferencia', amount: '0.5', symbol: 'ETH', timestamp: new Date().toISOString(), isSender: true, status: 'ok', to: '0x8a...12f' }
+             ]);
+          } else {
+            setHistory([]);
+          }
+        }
+
+        // 5. Gas
+        if (results[4].status === 'fulfilled') setGasStatus(results[4].value);
+
+      } catch (error) {
+        console.error("Error cargando datos", error);
+      } finally {
+        if (!isCancelled) setIsLoading(false);
+      }
+    };
+
     loadData();
-  }, [activeAccount?.address]);
+    return () => { isCancelled = true; };
+  }, [activeAccount?.address, trackedTokens.length]); // Se añade length para recargar al importar token
+
+  // PROTECCIÓN: No renderizar si no hay sesión
+  if (!isUnlocked) return null;
 
   const calculateTotalUsd = () => {
     let total = 0;
@@ -123,7 +138,17 @@ export default function Dashboard() {
   const renderGasThermometer = () => {
     if (!gasStatus) return null;
     
-    if (gasStatus.data?.tier === 'Unlimited' || !gasStatus.success) {
+    // Estado Neutral si falla
+    if (!gasStatus.success) {
+       return (
+        <div className="bg-gray-900/50 border border-white/10 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
+          <Clock size={24} className="text-gray-400 mb-2" />
+          <span className="text-xs font-bold text-gray-400 text-center">Gas: --</span>
+        </div>
+      );
+    }
+
+    if (gasStatus.data?.tier === 'Unlimited') {
       return (
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
           <Zap size={24} className="text-green-400 mb-2" />
@@ -136,8 +161,7 @@ export default function Dashboard() {
     }
 
     const remaining = gasStatus.data.remainingFreeTransactions || 0;
-    const max = 50; 
-    const percent = Math.min((remaining / max) * 100, 100);
+    const percent = Math.min((remaining / 50) * 100, 100);
 
     return (
       <div className="bg-gray-900/50 border border-white/10 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
@@ -151,14 +175,13 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-20">
+    <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-24">
       
       {/* HEADER */}
-      <header className="p-4 flex justify-between items-center bg-gray-950 z-20">
-        <div className="relative">
-          {/* Selector de Cuenta */}
-          <div 
-            className="flex items-center space-x-3 cursor-pointer p-1 rounded-lg hover:bg-white/5 transition-colors"
+      <header className="p-4 flex justify-between items-center bg-gray-950 z-20 relative">
+        <div className="relative" ref={menuRef}>
+          <button 
+            className="flex items-center space-x-3 p-1 rounded-lg hover:bg-white/5 transition-colors text-left"
             onClick={() => setShowAccountMenu(!showAccountMenu)}
           >
             <AccountAvatar address={activeAccount?.address} size={40} style="identicon" />
@@ -168,32 +191,34 @@ export default function Dashboard() {
               </p>
               <div className="flex items-center space-x-2">
                 <p className="text-sm font-mono">{truncatedAddress}</p>
-                <button 
+                <div 
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => { e.stopPropagation(); handleCopyAddress(); }}
-                  className="text-gray-400 hover:text-white"
+                  className="text-gray-400 hover:text-white cursor-pointer"
                 >
                   {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                </button>
+                </div>
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Menú Desplegable */}
           {showAccountMenu && (
             <div className="absolute top-full left-0 mt-2 w-64 bg-gray-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50">
               <div className="max-h-48 overflow-y-auto p-2 space-y-1">
                 {vaultBlob?.accounts.map((acc) => (
-                  <div 
+                  <button 
                     key={acc.index}
                     onClick={() => { setActiveAccount(acc.index); setShowAccountMenu(false); }}
-                    className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${activeAccount?.index === acc.index ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-white/5'}`}
+                    className={`w-full text-left flex items-center space-x-3 p-2 rounded-lg transition-colors ${activeAccount?.index === acc.index ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-white/5'}`}
                   >
                     <AccountAvatar address={acc.address} size={28} style="identicon" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">Cuenta {acc.index}</p>
                       <p className="text-xs text-gray-400 truncate">{acc.address}</p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
               <div className="border-t border-white/10 p-2">
@@ -330,10 +355,10 @@ export default function Dashboard() {
               history.map((tx, index) => (
                 <a 
                   key={tx.hash || index} 
-                  href={`https://0x4e4542e3.explorer.aurora-cloud.dev/tx/${tx.hash}`}
+                  href={`${TUXACHAIN_EXPLORER_URL}/tx/${tx.hash}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-3 flex items-center justify-between transition-colors block"
+                  className="bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-3 flex items-center justify-between transition-colors"
                 >
                   <div className="flex items-center space-x-3">
                     <TransactionIcon type={tx.type} />
@@ -363,8 +388,8 @@ export default function Dashboard() {
 
       </main>
 
-      {/* BOTTOM NAVIGATION */}
-      <nav className="absolute bottom-0 w-full bg-gray-950 border-t border-white/10 p-4 flex justify-around items-center">
+      {/* BOTTOM NAVIGATION (Fija) */}
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-gray-950 border-t border-white/10 p-4 flex justify-around items-center z-50">
         <button className="flex flex-col items-center space-y-1 text-purple-400">
           <Home size={20} />
           <span className="text-[10px] font-medium">Inicio</span>
@@ -380,4 +405,4 @@ export default function Dashboard() {
       </nav>
     </div>
   );
-  }
+               }
