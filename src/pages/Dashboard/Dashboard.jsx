@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Settings, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Zap, Home, Activity, Coins } from 'lucide-react';
+import { 
+  Lock, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, 
+  Zap, Home, Activity, Settings, Coins, Copy, Check, 
+  ChevronDown, Plus 
+} from 'lucide-react';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { fetchTransactionHistory } from '../../services/history.service.js';
 import { fetchSponsoredGasStatus } from '../../services/gas.service.js';
@@ -12,10 +16,13 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { 
     activeAccount, 
+    vaultBlob,
     lockWallet, 
     fetchActiveAccountBalance, 
     trackedTokens, 
     fetchERC20Balance,
+    setActiveAccount,
+    addNewAccount,
     isUnlocked 
   } = useWalletStore();
 
@@ -27,47 +34,58 @@ export default function Dashboard() {
   const [gasStatus, setGasStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hideBalance, setHideBalance] = useState(false);
+  
+  // Estados de UI
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  // Redirección de seguridad
   useEffect(() => {
     if (!isUnlocked) navigate('/unlock');
   }, [isUnlocked, navigate]);
 
-  // Carga de datos
+  // OPTIMIZACIÓN: Carga en paralelo con Promise.all
   const loadData = async () => {
     if (!activeAccount?.address) return;
     setIsLoading(true);
 
     try {
-      // 1. Obtener saldos
-      const bal = await fetchActiveAccountBalance();
-      setEthBalance(bal);
-
-      const newTokenBalances = {};
-      for (const token of trackedTokens) {
-        newTokenBalances[token.symbol] = await fetchERC20Balance(token.address);
-      }
-      setTokenBalances(newTokenBalances);
-
-      // 2. Obtener precios (pasamos la dirección nativa y las de los tokens)
-      const tokenAddresses = ['native', ...trackedTokens.map(t => t.address)];
-      const fetchedPrices = await fetchTokenPrices(tokenAddresses, 'usd');
-      setPrices(fetchedPrices);
-
-      // 3. Obtener historial
-      const realHistory = await fetchTransactionHistory(activeAccount.address);
-      // Si no hay historial, ponemos unos datos de prueba para que la UI se vea bien (opcional)
-      setHistory(realHistory.length > 0 ? realHistory.slice(0, 5) : [
-        { hash: '0x123a', type: 'send', method: 'Transfer', amount: '0.5', symbol: 'ETH', timestamp: new Date().toISOString(), isSender: true, status: 'ok' },
-        { hash: '0x456b', type: 'token_receive', method: 'Transfer', amount: '150.00', symbol: 'USDC', timestamp: new Date(Date.now() - 86400000).toISOString(), isSender: false, status: 'ok' }
+      // Lanzamos todas las peticiones a la vez
+      const [
+        bal,
+        tokenBalsArray,
+        fetchedPrices,
+        realHistory,
+        gasData
+      ] = await Promise.all([
+        fetchActiveAccountBalance(),
+        Promise.all(trackedTokens.map(token => fetchERC20Balance(token.address))),
+        fetchTokenPrices(['native', ...trackedTokens.map(t => t.address)], 'usd'),
+        fetchTransactionHistory(activeAccount.address),
+        fetchSponsoredGasStatus(activeAccount.address)
       ]);
 
-      // 4. Obtener estado del gas
-      const gasData = await fetchSponsoredGasStatus(activeAccount.address);
+      // Procesar resultados
+      setEthBalance(bal);
+      
+      const newTokenBalances = {};
+      trackedTokens.forEach((token, index) => {
+        newTokenBalances[token.symbol] = tokenBalsArray[index];
+      });
+      setTokenBalances(newTokenBalances);
+      
+      setPrices(fetchedPrices);
+
+      const mockHistory = [
+        { hash: '0x123a', type: 'send', method: 'Transferencia', amount: '0.5', symbol: 'ETH', timestamp: new Date().toISOString(), isSender: true, status: 'ok', to: '0x8a...12f', from: activeAccount.address },
+        { hash: '0x456b', type: 'token_receive', method: 'Recepción', amount: '150.00', symbol: 'USDC', timestamp: new Date(Date.now() - 86400000).toISOString(), isSender: false, status: 'ok', to: activeAccount.address, from: '0x3c...9a1' },
+        { hash: '0x789c', type: 'swap', method: 'Intercambio', amount: '10.0', symbol: 'WNEAR', timestamp: new Date(Date.now() - 172800000).toISOString(), isSender: true, status: 'error', to: '0x1b...4c2', from: activeAccount.address }
+      ];
+
+      setHistory(realHistory.length > 0 ? realHistory.slice(0, 3) : mockHistory);
       setGasStatus(gasData);
 
     } catch (error) {
-      console.error("Error cargando datos del dashboard", error);
+      console.error("Error cargando datos", error);
     } finally {
       setIsLoading(false);
     }
@@ -77,14 +95,11 @@ export default function Dashboard() {
     loadData();
   }, [activeAccount?.address]);
 
-  // Cálculos
   const calculateTotalUsd = () => {
     let total = 0;
-    // ETH
     const ethPrice = prices['ETH'] || 0;
     total += parseFloat(ethBalance) * ethPrice;
 
-    // Tokens
     trackedTokens.forEach(token => {
       const bal = parseFloat(tokenBalances[token.symbol] || '0');
       const price = prices[token.symbol] || 0;
@@ -97,33 +112,38 @@ export default function Dashboard() {
   const totalUsd = calculateTotalUsd();
   const truncatedAddress = activeAccount?.address ? `${activeAccount.address.slice(0, 6)}...${activeAccount.address.slice(-4)}` : '';
 
-  // Renderizado del termómetro de gas
+  const handleCopyAddress = () => {
+    if (activeAccount?.address) {
+      navigator.clipboard.writeText(activeAccount.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const renderGasThermometer = () => {
     if (!gasStatus) return null;
     
-    // Si es ilimitado o gratis
     if (gasStatus.data?.tier === 'Unlimited' || !gasStatus.success) {
       return (
-        <div className="bg-green-500/20 border border-green-500/30 rounded-xl p-3 flex flex-col items-center justify-center">
-          <Zap size={20} className="text-green-400 mb-1" />
-          <span className="text-xs font-bold text-green-400">Gas Gratis</span>
-          <div className="w-full bg-gray-700 h-1.5 rounded-full mt-2">
+        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
+          <Zap size={24} className="text-green-400 mb-2" />
+          <span className="text-xs font-bold text-green-400 text-center">Gas Gratis</span>
+          <div className="w-full bg-gray-700/50 h-1.5 rounded-full mt-2">
             <div className="bg-green-500 h-1.5 rounded-full" style={{ width: '100%' }}></div>
           </div>
         </div>
       );
     }
 
-    // Si hay un límite numérico
     const remaining = gasStatus.data.remainingFreeTransactions || 0;
-    const max = 50; // Asumimos un máximo de 50 para la barra visual
+    const max = 50; 
     const percent = Math.min((remaining / max) * 100, 100);
 
     return (
-      <div className="bg-gray-900/50 border border-white/10 rounded-xl p-3 flex flex-col items-center justify-center">
-        <Zap size={20} className="text-yellow-400 mb-1" />
-        <span className="text-xs font-bold text-white">{remaining} tx</span>
-        <div className="w-full bg-gray-700 h-1.5 rounded-full mt-2">
+      <div className="bg-gray-900/50 border border-white/10 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
+        <Zap size={24} className="text-yellow-400 mb-2" />
+        <span className="text-xs font-bold text-white text-center">{remaining} tx</span>
+        <div className="w-full bg-gray-700/50 h-1.5 rounded-full mt-2">
           <div className="bg-yellow-400 h-1.5 rounded-full" style={{ width: `${percent}%` }}></div>
         </div>
       </div>
@@ -134,14 +154,61 @@ export default function Dashboard() {
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-20">
       
       {/* HEADER */}
-      <header className="p-4 flex justify-between items-center bg-gray-950 z-10">
-        <div className="flex items-center space-x-3">
-          <AccountAvatar address={activeAccount?.address} size={40} style="identicon" />
-          <div>
-            <p className="text-xs text-gray-400">Cuenta Activa</p>
-            <p className="text-sm font-mono">{truncatedAddress}</p>
+      <header className="p-4 flex justify-between items-center bg-gray-950 z-20">
+        <div className="relative">
+          {/* Selector de Cuenta */}
+          <div 
+            className="flex items-center space-x-3 cursor-pointer p-1 rounded-lg hover:bg-white/5 transition-colors"
+            onClick={() => setShowAccountMenu(!showAccountMenu)}
+          >
+            <AccountAvatar address={activeAccount?.address} size={40} style="identicon" />
+            <div>
+              <p className="text-xs text-gray-400 flex items-center gap-1">
+                Cuenta Activa <ChevronDown size={12} />
+              </p>
+              <div className="flex items-center space-x-2">
+                <p className="text-sm font-mono">{truncatedAddress}</p>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleCopyAddress(); }}
+                  className="text-gray-400 hover:text-white"
+                >
+                  {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                </button>
+              </div>
+            </div>
           </div>
+
+          {/* Menú Desplegable */}
+          {showAccountMenu && (
+            <div className="absolute top-full left-0 mt-2 w-64 bg-gray-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50">
+              <div className="max-h-48 overflow-y-auto p-2 space-y-1">
+                {vaultBlob?.accounts.map((acc) => (
+                  <div 
+                    key={acc.index}
+                    onClick={() => { setActiveAccount(acc.index); setShowAccountMenu(false); }}
+                    className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${activeAccount?.index === acc.index ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-white/5'}`}
+                  >
+                    <AccountAvatar address={acc.address} size={28} style="identicon" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Cuenta {acc.index}</p>
+                      <p className="text-xs text-gray-400 truncate">{acc.address}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-white/10 p-2">
+                <button 
+                  onClick={() => { addNewAccount(); setShowAccountMenu(false); }}
+                  className="w-full flex items-center justify-center space-x-2 p-2 text-sm text-purple-400 hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <Plus size={16} />
+                  <span>Crear nueva cuenta</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
         <button 
           onClick={() => { lockWallet(); navigate('/unlock'); }}
           className="p-2 bg-gray-900 rounded-lg hover:bg-red-500/20 hover:text-red-400 transition-colors"
@@ -154,10 +221,10 @@ export default function Dashboard() {
         
         {/* TARJETA DE BALANCE */}
         <div className="bg-gradient-to-br from-purple-800 to-indigo-900 rounded-3xl p-5 shadow-lg border border-purple-500/30">
-          <div className="flex justify-between items-start mb-4">
-            <div>
+          <div className="flex justify-between items-stretch mb-2">
+            <div className="flex flex-col justify-center">
               <p className="text-purple-200 text-sm font-medium mb-1 flex items-center gap-2">
-                Total Balance
+                Saldo Total
                 <button onClick={() => setHideBalance(!hideBalance)} className="text-purple-300 hover:text-white">
                   {hideBalance ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -167,15 +234,11 @@ export default function Dashboard() {
                   {hideBalance ? '****' : `$${totalUsd}`}
                 </h2>
               </div>
-              <p className="text-purple-300 font-medium text-sm mt-1">
-                {hideBalance ? '****' : `~ ${ethBalance} ETH`}
-              </p>
             </div>
             
-            {/* Termómetro de Gas */}
-            <div className="w-24">
+            <div>
               {isLoading ? (
-                <div className="bg-gray-700/50 animate-pulse h-16 rounded-xl"></div>
+                <div className="bg-gray-700/50 animate-pulse h-full w-28 rounded-xl"></div>
               ) : renderGasThermometer()}
             </div>
           </div>
@@ -209,7 +272,6 @@ export default function Dashboard() {
               [1, 2, 3].map(i => <div key={i} className="h-16 bg-gray-900 animate-pulse rounded-2xl"></div>)
             ) : (
               <>
-                {/* Token Nativo (ETH) */}
                 <div className="bg-gray-900 border border-white/5 rounded-2xl p-3 flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">
@@ -228,7 +290,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Tokens ERC-20 (Limitado a 4) */}
                 {trackedTokens.slice(0, 4).map(token => (
                   <div key={token.address} className="bg-gray-900 border border-white/5 rounded-2xl p-3 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
@@ -253,7 +314,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* RECIENTE */}
+        {/* RECIENTE (Máximo 3) */}
         <div className="mt-8">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-bold">Reciente</h3>
@@ -267,13 +328,22 @@ export default function Dashboard() {
                <p className="text-sm text-gray-500 text-center py-4">No hay actividad reciente</p>
             ) : (
               history.map((tx, index) => (
-                <div key={tx.hash || index} className="bg-gray-900 border border-white/5 rounded-2xl p-3 flex items-center justify-between">
+                <a 
+                  key={tx.hash || index} 
+                  href={`https://0x4e4542e3.explorer.aurora-cloud.dev/tx/${tx.hash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-3 flex items-center justify-between transition-colors block"
+                >
                   <div className="flex items-center space-x-3">
                     <TransactionIcon type={tx.type} />
                     <div>
                       <p className="font-bold text-sm capitalize">{tx.method}</p>
                       <p className="text-xs text-gray-400">
-                        {new Date(tx.timestamp).toLocaleDateString()}
+                        {tx.isSender ? 'Para: ' : 'De: '} 
+                        {tx.isSender 
+                          ? (tx.to ? `${tx.to.slice(0, 6)}...${tx.to.slice(-4)}` : 'Desconocido') 
+                          : (tx.from ? `${tx.from.slice(0, 6)}...${tx.from.slice(-4)}` : 'Desconocido')}
                       </p>
                     </div>
                   </div>
@@ -281,8 +351,11 @@ export default function Dashboard() {
                     <p className={`font-bold text-sm ${tx.isSender ? 'text-white' : 'text-green-400'}`}>
                       {tx.isSender ? '-' : '+'}{tx.amount} {tx.symbol}
                     </p>
+                    <p className={`text-xs ${tx.status === 'ok' ? 'text-gray-400' : 'text-red-400'}`}>
+                      {tx.status === 'ok' ? 'Confirmada' : 'Fallida'}
+                    </p>
                   </div>
-                </div>
+                </a>
               ))
             )}
           </div>
@@ -294,7 +367,7 @@ export default function Dashboard() {
       <nav className="absolute bottom-0 w-full bg-gray-950 border-t border-white/10 p-4 flex justify-around items-center">
         <button className="flex flex-col items-center space-y-1 text-purple-400">
           <Home size={20} />
-          <span className="text-[10px] font-medium">Home</span>
+          <span className="text-[10px] font-medium">Inicio</span>
         </button>
         <button onClick={() => navigate('/activities')} className="flex flex-col items-center space-y-1 text-gray-500 hover:text-white transition-colors">
           <Activity size={20} />
@@ -302,9 +375,9 @@ export default function Dashboard() {
         </button>
         <button onClick={() => navigate('/settings')} className="flex flex-col items-center space-y-1 text-gray-500 hover:text-white transition-colors">
           <Settings size={20} />
-          <span className="text-[10px] font-medium">Configuraciones</span>
+          <span className="text-[10px] font-medium">Ajustes</span>
         </button>
       </nav>
     </div>
   );
-    }
+  }
