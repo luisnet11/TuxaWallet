@@ -10,7 +10,7 @@ import {
   deriveAccount,
 } from '../vault/walletVault.js';
 import { getTuxaPublicClient, createTuxaWalletClient, ERC20_ABI } from '../services/viemClient.js';
-import { DEFAULT_TOKENS } from '../config/tokens.config.js'; // NUEVO IMPORT
+import { DEFAULT_TOKENS } from '../config/tokens.config.js';
 
 export const useWalletStore = create(
   persist(
@@ -48,7 +48,7 @@ export const useWalletStore = create(
             pendingWallet: null,
             isUnlocked: true,
             activeAccount: pendingWallet.accounts[0],
-            trackedTokens: DEFAULT_TOKENS, // CARGAR TOKENS POR DEFECTO
+            trackedTokens: DEFAULT_TOKENS,
           });
         }
       },
@@ -62,7 +62,7 @@ export const useWalletStore = create(
             isUnlocked: true,
             mnemonicSession: cleanMnemonic,
             activeAccount: vaultBlob.accounts[0],
-            trackedTokens: DEFAULT_TOKENS, // CARGAR TOKENS POR DEFECTO
+            trackedTokens: DEFAULT_TOKENS,
             isLoading: false,
           });
         } catch (err) {
@@ -83,7 +83,6 @@ export const useWalletStore = create(
             mnemonicSession: mnemonic,
             activeAccount: vaultBlob.accounts[0],
             isLoading: false,
-            // Si la billetera es vieja y no tiene tokens, cargamos los por defecto
             trackedTokens: trackedTokens.length === 0 ? DEFAULT_TOKENS : trackedTokens,
           });
         } catch (err) {
@@ -142,14 +141,16 @@ export const useWalletStore = create(
 
       fetchActiveAccountBalance: async () => {
         const { activeAccount } = get();
-        if (!activeAccount) return '0';
+        if (!activeAccount) return '0.0000';
         try {
           const client = getTuxaPublicClient();
           const balanceWei = await client.getBalance({ address: activeAccount.address });
-          return formatEther(balanceWei);
+          const formatted = formatEther(balanceWei);
+          // CORRECCIÓN: Truncar a 4 decimales para el saldo nativo
+          return parseFloat(formatted).toFixed(4);
         } catch (err) {
           console.error(err);
-          return '0';
+          return '0.0000';
         }
       },
 
@@ -179,9 +180,9 @@ export const useWalletStore = create(
 
       fetchERC20Balance: async (tokenAddress) => {
         const { activeAccount, trackedTokens } = get();
-        if (!activeAccount) return '0';
+        if (!activeAccount) return '0.0000';
         const token = trackedTokens.find(t => t.address === tokenAddress);
-        if (!token) return '0';
+        if (!token) return '0.0000';
 
         try {
           const client = getTuxaPublicClient();
@@ -191,10 +192,14 @@ export const useWalletStore = create(
             functionName: 'balanceOf',
             args: [activeAccount.address],
           });
-          return formatUnits(balanceWei, token.decimals);
+          const formatted = formatUnits(balanceWei, token.decimals);
+          
+          // CORRECCIÓN CRÍTICA: Convertimos a número, fijamos 4 decimales y volvemos a string.
+          // Esto elimina los 24 decimales del wNEAR y muestra "1.2345" o "0.0000".
+          return parseFloat(formatted).toFixed(4); 
         } catch (err) {
           console.error(err);
-          return '0';
+          return '0.0000';
         }
       },
 
