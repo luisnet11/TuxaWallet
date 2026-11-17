@@ -2,11 +2,14 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useWalletStore } from './store/useWalletStore.js';
 import { injectTuxaProvider } from './services/walletProvider.js';
+
+// Páginas
 import Welcome from './pages/Welcome/Welcome.jsx';
 import CreateWallet from './pages/CreateWallet/CreateWallet.jsx';
 import ImportWallet from './pages/ImportWallet/ImportWallet.jsx';
 import UnlockWallet from './pages/UnlockWallet/UnlockWallet.jsx';
-import Dashboard from './pages/Dashboard/Dashboard.jsx'; // <-- NUEVO
+import Dashboard from './pages/Dashboard/Dashboard.jsx';
+import AddressBook from './pages/AddressBook/AddressBook.jsx'; // <-- NUEVO IMPORT
 
 export default function App() {
   const { vaultBlob, isUnlocked } = useWalletStore();
@@ -29,10 +32,14 @@ export default function App() {
           element={vaultBlob ? <UnlockWallet /> : <Navigate to="/welcome" replace />} 
         />
 
-        {/* Ruta del Dashboard (Protegida) */}
+        {/* Rutas Protegidas (Requieren sesión activa) */}
         <Route 
           path="/dashboard" 
           element={isUnlocked ? <Dashboard /> : <Navigate to="/unlock" replace />} 
+        />
+        <Route 
+          path="/address-book" 
+          element={isUnlocked ? <AddressBook /> : <Navigate to="/unlock" replace />} 
         />
 
         {/* Ruta Raíz: Redirección automática basada en el estado */}
