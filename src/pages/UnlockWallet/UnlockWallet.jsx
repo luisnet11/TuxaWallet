@@ -1,14 +1,18 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; // <-- NUEVO: useLocation
 import { useWalletStore } from '../../store/useWalletStore.js';
 
 export default function UnlockWallet() {
   const navigate = useNavigate();
+  const location = useLocation(); // <-- NUEVO
   const { unlockExistingWallet, resetWallet, isLoading, error, clearError } = useWalletStore();
 
   const [password, setPassword] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
   const [localError, setLocalError] = useState('');
+
+  // NUEVA LÓGICA: Si venimos de una ruta protegida, volvemos allí. Si no, al dashboard.
+  const from = location.state?.from?.pathname || '/dashboard';
 
   const handleUnlock = async (e) => {
     e.preventDefault();
@@ -18,9 +22,9 @@ export default function UnlockWallet() {
 
     try {
       await unlockExistingWallet(password);
-      navigate('/dashboard'); // Irá al dashboard cuando exista
+      navigate(from, { replace: true }); // <-- Usamos la ruta guardada
     } catch (err) {
-      // El store maneja el error
+      // El error se maneja en el store
     }
   };
 
@@ -33,12 +37,10 @@ export default function UnlockWallet() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1a0b2e] to-[#0f0518] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
       
-      {/* Adornos de fondo (Efecto Glow) */}
       <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
       <div className="w-full max-w-md z-10">
-        {/* Icono de Candado */}
         <div className="flex justify-center mb-8">
           <div className="w-20 h-20 bg-purple-500/20 border border-purple-500/30 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(147,51,234,0.3)]">
             <span className="text-4xl">🔒</span>
@@ -77,7 +79,6 @@ export default function UnlockWallet() {
           </button>
         </form>
 
-        {/* Botón de Rescate */}
         <div className="mt-12 text-center">
           <button
             onClick={() => setShowResetModal(true)}
@@ -88,7 +89,6 @@ export default function UnlockWallet() {
         </div>
       </div>
 
-      {/* MODAL DE CONFIRMACIÓN DE BORRADO (daisyUI style) */}
       {showResetModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-[#1a0b2e] border border-red-900/50 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
@@ -115,4 +115,4 @@ export default function UnlockWallet() {
       )}
     </div>
   );
-      }
+}
