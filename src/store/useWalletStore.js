@@ -48,7 +48,7 @@ export const useWalletStore = create(
             pendingWallet: null,
             isUnlocked: true,
             activeAccount: pendingWallet.accounts[0],
-            trackedTokens: DEFAULT_TOKENS, // <-- Solo los tokens ERC-20, sin ETH
+            trackedTokens: DEFAULT_TOKENS,
           });
         }
       },
@@ -62,7 +62,7 @@ export const useWalletStore = create(
             isUnlocked: true,
             mnemonicSession: cleanMnemonic,
             activeAccount: vaultBlob.accounts[0],
-            trackedTokens: DEFAULT_TOKENS, // <-- Solo los tokens ERC-20, sin ETH
+            trackedTokens: DEFAULT_TOKENS,
             isLoading: false,
           });
         } catch (err) {
@@ -139,7 +139,6 @@ export const useWalletStore = create(
         if (account) set({ activeAccount: account, error: null });
       },
 
-      // SALDO NATIVO (Única fuente de verdad para ETH)
       fetchActiveAccountBalance: async () => {
         const { activeAccount } = get();
         if (!activeAccount) return '0.0000';
@@ -159,7 +158,6 @@ export const useWalletStore = create(
         if (trackedTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase())) {
           throw new Error('El token ya está agregado.');
         }
-
         set({ isLoading: true, error: null });
         try {
           const client = getTuxaPublicClient();
@@ -168,7 +166,6 @@ export const useWalletStore = create(
             client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'symbol' }),
             client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'decimals' }),
           ]);
-
           const newToken = { address: tokenAddress, name, symbol, decimals };
           set({ trackedTokens: [...trackedTokens, newToken], isLoading: false });
           return newToken;
@@ -247,7 +244,6 @@ export const useWalletStore = create(
           set({ error: 'Dirección de destino inválida.' });
           throw new Error('Dirección de destino inválida.');
         }
-
         const token = trackedTokens.find(t => t.address === tokenAddress);
         if (!token) throw new Error('Token no encontrado en la lista.');
 
@@ -284,6 +280,19 @@ export const useWalletStore = create(
     {
       name: 'tuxawallet-storage',
       storage: createJSONStorage(() => localStorage),
+      version: 1, // <-- NUEVA VERSIÓN
+      migrate: (persistedState, version) => {
+        // Si el estado guardado es de la versión 0 (antes de eliminar el contrato ETH)
+        if (version === 0) {
+          if (persistedState.trackedTokens) {
+            // Filtramos y eliminamos el contrato de ETH puenteado
+            persistedState.trackedTokens = persistedState.trackedTokens.filter(
+              (t) => t.address.toLowerCase() !== '0x5a524251df27a25ac6b9964a93e1c23ad692688d'
+            );
+          }
+        }
+        return persistedState;
+      },
       partialize: (state) => ({ vaultBlob: state.vaultBlob, trackedTokens: state.trackedTokens }),
     }
   )
