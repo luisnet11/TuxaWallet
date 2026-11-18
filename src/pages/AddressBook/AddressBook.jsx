@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom'; // <-- AÑADIDO useSearchParams
 import { Search, ChevronLeft, Plus, Edit2, Trash2, Star } from 'lucide-react';
 import { useAddressBookStore } from '../../store/useAddressBookStore.js';
 import AccountAvatar from '../../components/AccountAvatar.jsx';
@@ -7,6 +7,7 @@ import AddressModal from '../../components/AddressModal.jsx';
 
 export default function AddressBook() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams(); // <-- LEER PARAMS
   const { contacts, removeContact, toggleFavorite } = useAddressBookStore();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,7 +16,6 @@ export default function AddressBook() {
 
   const filteredContacts = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    
     return contacts
       .filter(c => 
         c.label.toLowerCase().includes(term) || 
@@ -53,12 +53,17 @@ export default function AddressBook() {
   };
 
   const handleSelectContact = (address) => {
-    navigate(`/send?address=${address}`);
+    // PRESERVAR EL TOKEN SI VENIMOS DE LA PANTALLA DE ENVÍO
+    const tokenParam = searchParams.get('token');
+    if (tokenParam) {
+      navigate(`/send?address=${address}&token=${tokenParam}`);
+    } else {
+      navigate(`/send?address=${address}`);
+    }
   };
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-24">
-      
       <header className="p-4 flex items-center space-x-3 bg-gray-950 z-10 sticky top-0">
         <button onClick={() => navigate(-1)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
           <ChevronLeft size={20} />
@@ -70,7 +75,6 @@ export default function AddressBook() {
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto">
-        
         <div className="relative mb-6">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input 
