@@ -10,8 +10,9 @@ import ImportWallet from './pages/ImportWallet/ImportWallet.jsx';
 import UnlockWallet from './pages/UnlockWallet/UnlockWallet.jsx';
 import Dashboard from './pages/Dashboard/Dashboard.jsx';
 import AddressBook from './pages/AddressBook/AddressBook.jsx';
+import Send from './pages/Send/Send.jsx'; // <-- NUEVA IMPORTACIÓN
 
-// Componente de protección de rutas
+// Componente de protección de rutas (Return to Origin)
 function ProtectedRoute({ children }) {
   const { isUnlocked } = useWalletStore();
   const location = useLocation();
@@ -44,7 +45,7 @@ export default function App() {
           element={vaultBlob ? <UnlockWallet /> : <Navigate to="/welcome" replace />} 
         />
 
-        {/* Rutas Protegidas */}
+        {/* Rutas Protegidas (Requieren sesión activa) */}
         <Route 
           path="/dashboard" 
           element={<ProtectedRoute><Dashboard /></ProtectedRoute>} 
@@ -53,14 +54,18 @@ export default function App() {
           path="/address-book" 
           element={<ProtectedRoute><AddressBook /></ProtectedRoute>} 
         />
+        <Route 
+          path="/send" 
+          element={<ProtectedRoute><Send /></ProtectedRoute>} 
+        />
 
-        {/* Ruta Raíz: Redirección automática */}
+        {/* Ruta Raíz y Catch-all: Redirección automática basada en el estado */}
         <Route 
           path="*" 
           element={
             !vaultBlob 
               ? <Navigate to="/welcome" replace /> 
-              : <Navigate to="/dashboard" replace />
+              : (!useWalletStore.getState().isUnlocked ? <Navigate to="/unlock" replace /> : <Navigate to="/dashboard" replace />)
           } 
         />
       </Routes>
