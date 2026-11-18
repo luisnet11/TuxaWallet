@@ -5,13 +5,14 @@ export default function Diagnostics() {
   const { activeAccount } = useWalletStore();
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [manualAddress, setManualAddress] = useState('');
 
   const runDiagnostics = async () => {
     setLoading(true);
     setResults([]);
     
     const RPC = 'https://0x4e4542e3.rpc.aurora-cloud.dev';
-    const ADDRESS = activeAccount?.address;
+    const ADDRESS = manualAddress || activeAccount?.address; 
     const TOKENS = {
       AURORA: '0x8bec47865ade3b172a928df8f990bc7f2a3b9f79',
       wNEAR: '0xc42c30ac6cc15fac9bd938618bcaa1a1fae8501d',
@@ -34,34 +35,18 @@ export default function Diagnostics() {
 
     const newResults = [];
 
-    // 1) CORS
-    const bn = await call({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] });
-    newResults.push({ prueba: 'eth_blockNumber (CORS)', status: bn.status, resultado: bn.json?.result || 'Error' });
-
-    // 2) Saldo Nativo
     if (ADDRESS) {
+      newResults.push({ prueba: 'Dirección Usada', status: 'OK', resultado: ADDRESS });
       const bal = await call({ jsonrpc: '2.0', id: 2, method: 'eth_getBalance', params: [ADDRESS, 'latest'] });
-      newResults.push({ prueba: 'eth_getBalance', status: bal.status, resultado: bal.json?.result || 'Error' });
+      newResults.push({ prueba: 'eth_getBalance (Nativo)', status: bal.status, resultado: bal.json?.result || 'Error' });
+    } else {
+      newResults.push({ prueba: 'ALERTA', status: 'ERROR', resultado: 'No hay dirección activa ni manual.' });
     }
 
-    // 3) ¿Existen los contratos?
-    for (const [name, addr] of Object.entries(TOKENS)) {
-      const r = await call({ jsonrpc: '2.0', id: 3, method: 'eth_getCode', params: [addr, 'latest'] });
-      const code = r.json?.result;
-      newResults.push({ prueba: `getCode ${name}`, status: r.status, resultado: code && code !== '0x' ? '✅ EXISTE' : '❌ NO HAY CONTRATO' });
-    }
-
-    // 4) Batch
-    const batch = await call([
-      { jsonrpc: '2.0', id: 10, method: 'eth_blockNumber', params: [] },
-      { jsonrpc: '2.0', id: 11, method: 'eth_chainId', params: [] },
-    ]);
-    newResults.push({ prueba: 'Soporte Batch (array)', status: batch.status, resultado: Array.isArray(batch.json) ? '✅ SOPORTADO' : '❌ NO SOPORTADO' });
-
-    // 5) Ráfaga x10
+    // Ráfaga x10 para probar estabilidad
     const burst = await Promise.all(Array.from({ length: 10 }, (_, i) => call({ jsonrpc: '2.0', id: 100 + i, method: 'eth_blockNumber', params: [] })));
     const counts = burst.reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {});
-    newResults.push({ prueba: 'Ráfaga x10 (Rate Limit)', status: 'OK', resultado: JSON.stringify(counts) });
+    newResults.push({ prueba: 'Ráfaga x10', status: 'OK', resultado: JSON.stringify(counts) });
 
     setResults(newResults);
     setLoading(false);
@@ -70,14 +55,24 @@ export default function Diagnostics() {
   return (
     <div className="min-h-screen bg-gray-950 text-white p-4">
       <h1 className="text-xl font-bold mb-4">Diagnóstico RPC Tuxachain</h1>
-      <p className="text-xs text-gray-400 mb-4">Cuenta: {activeAccount?.address}</p>
       
+      <div className="mb-4">
+        <label className="text-xs text-gray-400 block mb-1">Dirección a probar (dejar vacío para usar la activa):</label>
+        <input 
+          type="text" 
+          value={manualAddress}
+          onChange={(e) => setManualAddress(e.target.value)}
+          placeholder="0x..."
+          className="w-full bg-gray-900 border border-white/10 rounded-lg p-2 text-sm font-mono"
+        />
+      </div>
+
       <button 
         onClick={runDiagnostics} 
         disabled={loading}
         className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl mb-6"
       >
-        {loading ? 'Ejecutando pruebas...' : 'Ejecutar Diagnóstico'}
+        {loading ? 'Ejecutando...' : 'Ejecutar Diagnóstico'}
       </button>
 
       <div className="space-y-2">
@@ -91,4 +86,4 @@ export default function Diagnostics() {
       </div>
     </div>
   );
-        }
+}
