@@ -10,7 +10,8 @@ import ImportWallet from './pages/ImportWallet/ImportWallet.jsx';
 import UnlockWallet from './pages/UnlockWallet/UnlockWallet.jsx';
 import Dashboard from './pages/Dashboard/Dashboard.jsx';
 import AddressBook from './pages/AddressBook/AddressBook.jsx';
-import Send from './pages/Send/Send.jsx'; // <-- NUEVA IMPORTACIÓN
+import Send from './pages/Send/Send.jsx';
+import Assets from './pages/Assets/Assets.jsx'; // <-- NUEVO IMPORT
 
 // Componente de protección de rutas (Return to Origin)
 function ProtectedRoute({ children }) {
@@ -25,7 +26,7 @@ function ProtectedRoute({ children }) {
 }
 
 export default function App() {
-  const { vaultBlob } = useWalletStore();
+  const { vaultBlob, isUnlocked } = useWalletStore();
 
   useEffect(() => {
     injectTuxaProvider();
@@ -58,6 +59,10 @@ export default function App() {
           path="/send" 
           element={<ProtectedRoute><Send /></ProtectedRoute>} 
         />
+        <Route 
+          path="/assets" 
+          element={<ProtectedRoute><Assets /></ProtectedRoute>} 
+        />
 
         {/* Ruta Raíz y Catch-all: Redirección automática basada en el estado */}
         <Route 
@@ -65,7 +70,7 @@ export default function App() {
           element={
             !vaultBlob 
               ? <Navigate to="/welcome" replace /> 
-              : (!useWalletStore.getState().isUnlocked ? <Navigate to="/unlock" replace /> : <Navigate to="/dashboard" replace />)
+              : (!isUnlocked ? <Navigate to="/unlock" replace /> : <Navigate to="/dashboard" replace />)
           } 
         />
       </Routes>
