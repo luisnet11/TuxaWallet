@@ -4,12 +4,13 @@ import { ChevronLeft, Search, SlidersHorizontal, Plus, Coins, UserPlus } from 'l
 import { isAddress } from 'viem';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
-import AddressModal from '../../components/AddressModal.jsx'; // Reutilizamos el modal para importar si es dirección
+import AddressModal from '../../components/AddressModal.jsx';
 
 export default function Assets() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo');
+  const addressParam = searchParams.get('address'); // <-- RECUPERAMOS LA DIRECCIÓN
   
   const { trackedTokens, fetchERC20Balance, fetchActiveAccountBalance } = useWalletStore();
 
@@ -20,21 +21,15 @@ export default function Assets() {
   const [isLoading, setIsLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
 
-  // 1. Cargar saldos y precios
   useEffect(() => {
     const loadAssets = async () => {
       setIsLoading(true);
       try {
-        // Saldo Nativo
         const ethBal = await fetchActiveAccountBalance();
-        
-        // Saldos de Tokens
         const tokenBals = {};
         for (const token of trackedTokens) {
           tokenBals[token.address] = await fetchERC20Balance(token.address);
         }
-
-        // Precios
         const tokenAddrs = ['native', ...trackedTokens.map(t => t.address)];
         const fetchedPrices = await fetchTokenPrices(tokenAddrs, 'usd');
 
@@ -49,15 +44,10 @@ export default function Assets() {
     loadAssets();
   }, [trackedTokens]);
 
-  // 2. Lista unificada (Nativo + ERC20)
   const allTokens = useMemo(() => {
-    return [
-      { address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 },
-      ...trackedTokens
-    ];
+    return [{ address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 }, ...trackedTokens];
   }, [trackedTokens]);
 
-  // 3. Filtrado y Ordenamiento
   const filteredTokens = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return allTokens
@@ -71,31 +61,26 @@ export default function Assets() {
       });
   }, [allTokens, searchTerm, hideZero, balances]);
 
-  // 4. Manejo de clic en el Token
   const handleTokenClick = (token) => {
     if (returnTo === 'send') {
-      navigate(`/send?token=${token.address}`);
+      // Si venimos de Send, devolvemos el token Y la dirección si es que había una
+      const addrParam = addressParam ? `&address=${addressParam}` : '';
+      navigate(`/send?token=${token.address}${addrParam}`);
     } else {
-      // Futuro: Ir a la página de detalles del token
-      // navigate(`/token-detail?address=${token.address}`);
       alert(`Ver detalles de ${token.symbol} (Próximamente)`); 
     }
   };
 
-  // 5. Manejo de Importación desde la búsqueda
   const isValidAddressSearch = isAddress(searchTerm);
   const isAlreadyTracked = allTokens.some(t => t.address.toLowerCase() === searchTerm.toLowerCase());
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative">
-      
-      {/* HEADER */}
       <header className="p-4 flex items-center space-x-2 bg-gray-950 z-10 sticky top-0">
         <button onClick={() => navigate(-1)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
           <ChevronLeft size={20} />
         </button>
         
-        {/* BUSCADOR */}
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input 
@@ -107,7 +92,6 @@ export default function Assets() {
           />
         </div>
 
-        {/* BOTONES ACCIÓN */}
         <button 
           onClick={() => setHideZero(!hideZero)}
           className={`p-2 rounded-lg transition-colors ${hideZero ? 'bg-purple-600/20 text-purple-400' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
@@ -121,15 +105,12 @@ export default function Assets() {
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto pb-10">
-        
-        {/* LISTA DE TOKENS */}
         <div className="space-y-3 mt-4">
           {isLoading ? (
             [1, 2, 3, 4, 5].map(i => <div key={i} className="h-16 bg-gray-900 animate-pulse rounded-2xl"></div>)
           ) : filteredTokens.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-gray-500 text-sm mb-4">No se encontraron tokens.</p>
-              {/* BOTÓN DE IMPORTAR SI ES UNA DIRECCIÓN VÁLIDA */}
               {isValidAddressSearch && !isAlreadyTracked && (
                 <button 
                   onClick={() => setShowImportModal(true)}
@@ -173,7 +154,6 @@ export default function Assets() {
         </div>
       </main>
 
-      {/* MODAL: IMPORTAR TOKEN (Reutilizamos AddressModal para simular la importación) */}
       <AddressModal 
         isOpen={showImportModal} 
         onClose={() => setShowImportModal(false)} 
@@ -181,4 +161,4 @@ export default function Assets() {
       />
     </div>
   );
-      }
+}
