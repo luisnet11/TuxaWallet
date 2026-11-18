@@ -3,12 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useWalletStore } from './store/useWalletStore.js';
 import { injectTuxaProvider } from './services/walletProvider.js';
 import useAutoLock from './hooks/useAutoLock.js';
-// ... (imports anteriores) ...
-import Assets from './pages/Assets/Assets.jsx';
-import Diagnostics from './pages/Diagnostics/Diagnostics.jsx'; // <-- NUEVO IMPORT
 
-// ... (dentro de AppContent)
-      <Route path="/diagnostics" element={<Diagnostics />} /> {/* <-- NUEVA RUTA */}
 // Páginas
 import Welcome from './pages/Welcome/Welcome.jsx';
 import CreateWallet from './pages/CreateWallet/CreateWallet.jsx';
@@ -18,6 +13,7 @@ import Dashboard from './pages/Dashboard/Dashboard.jsx';
 import AddressBook from './pages/AddressBook/AddressBook.jsx';
 import Send from './pages/Send/Send.jsx';
 import Assets from './pages/Assets/Assets.jsx';
+import Diagnostics from './pages/Diagnostics/Diagnostics.jsx'; // <-- IMPORTADO AQUÍ
 
 function ProtectedRoute({ children }) {
   const { isUnlocked } = useWalletStore();
@@ -29,11 +25,9 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-// Componente interno que SÍ tiene acceso al Router
 function AppContent() {
   const { vaultBlob, isUnlocked } = useWalletStore();
 
-  // Hook de auto-bloqueo ahora está DENTRO del Router
   useAutoLock(5);
 
   return (
@@ -48,6 +42,9 @@ function AppContent() {
         path="/unlock" 
         element={vaultBlob ? <UnlockWallet /> : <Navigate to="/welcome" replace />} 
       />
+
+      {/* RUTA DE DIAGNÓSTICO TEMPORAL (Sin protección) */}
+      <Route path="/diagnostics" element={<Diagnostics />} />
 
       {/* Rutas Protegidas */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -69,7 +66,6 @@ function AppContent() {
 }
 
 export default function App() {
-  // Inyectamos el provider al arrancar
   useEffect(() => {
     injectTuxaProvider();
   }, []);
