@@ -139,17 +139,22 @@ export const useWalletStore = create(
         if (account) set({ activeAccount: account, error: null });
       },
 
+      // SALDO NATIVO CON MANEJO DE DUST Y ERRORES
       fetchActiveAccountBalance: async () => {
         const { activeAccount } = get();
-        if (!activeAccount) return '0.0000';
+        if (!activeAccount) return null; 
         try {
           const client = getTuxaPublicClient();
           const balanceWei = await client.getBalance({ address: activeAccount.address });
           const formatted = formatEther(balanceWei);
-          return parseFloat(formatted).toFixed(4);
+          const num = parseFloat(formatted);
+          
+          // Si el saldo es mayor a 0 pero menor a 0.0001, mostramos el indicador
+          if (num === 0 && balanceWei > 0n) return '<0.0001';
+          return num.toFixed(4);
         } catch (err) {
-          console.error(err);
-          return '0.0000';
+          console.error('[TuxaWallet] Error RPC saldo nativo:', err);
+          return null; // Devuelve null para indicar error, no 0
         }
       },
 
@@ -158,6 +163,7 @@ export const useWalletStore = create(
         if (trackedTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase())) {
           throw new Error('El token ya está agregado.');
         }
+
         set({ isLoading: true, error: null });
         try {
           const client = getTuxaPublicClient();
@@ -166,6 +172,7 @@ export const useWalletStore = create(
             client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'symbol' }),
             client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'decimals' }),
           ]);
+
           const newToken = { address: tokenAddress, name, symbol, decimals };
           set({ trackedTokens: [...trackedTokens, newToken], isLoading: false });
           return newToken;
@@ -175,11 +182,12 @@ export const useWalletStore = create(
         }
       },
 
+      // SALDO ERC-20 CON MANEJO DE DUST Y ERRORES
       fetchERC20Balance: async (tokenAddress) => {
         const { activeAccount, trackedTokens } = get();
-        if (!activeAccount) return '0.0000';
+        if (!activeAccount) return null; 
         const token = trackedTokens.find(t => t.address === tokenAddress);
-        if (!token) return '0.0000';
+        if (!token) return null;
 
         try {
           const client = getTuxaPublicClient();
@@ -190,10 +198,14 @@ export const useWalletStore = create(
             args: [activeAccount.address],
           });
           const formatted = formatUnits(balanceWei, token.decimals);
-          return parseFloat(formatted).toFixed(4); 
+          const num = parseFloat(formatted);
+          
+          // Si el token tiene decimales altos (ej. wNEAR 24) y es una fracción mínima
+          if (num === 0 && balanceWei > 0n) return '<0.0001';
+          return num.toFixed(4); 
         } catch (err) {
-          console.error(err);
-          return '0.0000';
+          console.error(`[TuxaWallet] Error RPC token ${token.symbol}:`, err);
+          return null; // Devuelve null para indicar error
         }
       },
 
@@ -244,6 +256,7 @@ export const useWalletStore = create(
           set({ error: 'Dirección de destino inválida.' });
           throw new Error('Dirección de destino inválida.');
         }
+
         const token = trackedTokens.find(t => t.address === tokenAddress);
         if (!token) throw new Error('Token no encontrado en la lista.');
 
@@ -280,12 +293,11 @@ export const useWalletStore = create(
     {
       name: 'tuxawallet-storage',
       storage: createJSONStorage(() => localStorage),
-      version: 1, // <-- NUEVA VERSIÓN
+      version: 1, 
       migrate: (persistedState, version) => {
-        // Si el estado guardado es de la versión 0 (antes de eliminar el contrato ETH)
+        // Migración para eliminar el contrato de ETH puenteado de usuarios viejos
         if (version === 0) {
           if (persistedState.trackedTokens) {
-            // Filtramos y eliminamos el contrato de ETH puenteado
             persistedState.trackedTokens = persistedState.trackedTokens.filter(
               (t) => t.address.toLowerCase() !== '0x5a524251df27a25ac6b9964a93e1c23ad692688d'
             );
