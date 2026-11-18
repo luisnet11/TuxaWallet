@@ -3,7 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useWalletStore } from './store/useWalletStore.js';
 import { injectTuxaProvider } from './services/walletProvider.js';
 import useAutoLock from './hooks/useAutoLock.js';
+// ... (imports anteriores) ...
+import Assets from './pages/Assets/Assets.jsx';
+import Diagnostics from './pages/Diagnostics/Diagnostics.jsx'; // <-- NUEVO IMPORT
 
+// ... (dentro de AppContent)
+      <Route path="/diagnostics" element={<Diagnostics />} /> {/* <-- NUEVA RUTA */}
 // Páginas
 import Welcome from './pages/Welcome/Welcome.jsx';
 import CreateWallet from './pages/CreateWallet/CreateWallet.jsx';
