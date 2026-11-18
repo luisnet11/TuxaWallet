@@ -19,7 +19,6 @@ export default function Send() {
   } = useWalletStore();
   const { contacts } = useAddressBookStore();
 
-  // Estados de UI
   const [selectedToken, setSelectedToken] = useState({ address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 });
   const [tokenBalance, setTokenBalance] = useState('0.0000');
   const [recipient, setRecipient] = useState('');
@@ -28,7 +27,6 @@ export default function Send() {
   const [prices, setPrices] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   
-  // Estados de Modales
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [password, setPassword] = useState('');
@@ -36,7 +34,6 @@ export default function Send() {
 
   const allTokens = [{ address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 }, ...trackedTokens];
 
-  // 1. Cargar datos iniciales
   useEffect(() => {
     const addressFromBook = searchParams.get('address');
     if (addressFromBook) setRecipient(addressFromBook);
@@ -55,44 +52,29 @@ export default function Send() {
     loadPrices();
   }, [searchParams, trackedTokens]);
 
-  // 2. Cargar balance real
   useEffect(() => {
     const loadBalance = async () => {
       if (selectedToken.address === 'native') {
-        const bal = await fetchActiveAccountBalance();
-        setTokenBalance(bal);
+        setTokenBalance(await fetchActiveAccountBalance());
       } else {
-        const bal = await fetchERC20Balance(selectedToken.address);
-        setTokenBalance(bal);
+        setTokenBalance(await fetchERC20Balance(selectedToken.address));
       }
     };
     loadBalance();
   }, [selectedToken, activeAccount?.address]);
 
-  // 3. Cálculos
   const currentPrice = prices[selectedToken.symbol] || 0;
   
-  const getTokenAmount = () => {
-    if (!amount) return 0;
-    return isFiatMode ? (parseFloat(amount) / currentPrice) : parseFloat(amount);
-  };
-
-  const getFiatAmount = () => {
-    if (!amount) return 0;
-    return isFiatMode ? parseFloat(amount) : (parseFloat(amount) * currentPrice);
-  };
-
+  const getTokenAmount = () => !amount ? 0 : (isFiatMode ? (parseFloat(amount) / currentPrice) : parseFloat(amount));
+  const getFiatAmount = () => !amount ? 0 : (isFiatMode ? parseFloat(amount) : (parseFloat(amount) * currentPrice));
+  
   const tokenAmount = getTokenAmount();
   const fiatAmount = getFiatAmount();
-
-  // 4. Validaciones
   const isValidAddress = isAddress(recipient);
   const isKnownContact = contacts.some(c => c.address.toLowerCase() === recipient.toLowerCase());
-  
   const availableBalance = parseFloat(tokenBalance) || 0;
   const isInsufficientFunds = tokenAmount > (availableBalance + 0.000001);
 
-  // 5. Manejar Pegar y Max
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -103,14 +85,13 @@ export default function Send() {
   const handleMax = async () => {
     const bal = parseFloat(tokenBalance);
     if (selectedToken.address === 'native') {
-      const max = Math.max(0, bal - 0.001); // Reservar gas
+      const max = Math.max(0, bal - 0.001);
       setAmount(isFiatMode ? (max * currentPrice).toFixed(2) : max.toString());
     } else {
       setAmount(isFiatMode ? (bal * currentPrice).toFixed(2) : tokenBalance);
     }
   };
 
-  // 6. Ejecutar Envío
   const executeSend = async () => {
     setIsLoading(true);
     try {
@@ -120,7 +101,6 @@ export default function Send() {
       } else {
         result = await sendERC20Token(selectedToken.address, recipient, tokenAmount.toString(), false);
       }
-      
       if (result.success) {
         alert(`✅ Transacción enviada.\nHash: ${result.hash}`);
         navigate('/dashboard');
@@ -136,12 +116,8 @@ export default function Send() {
 
   const handleSendClick = () => {
     if (!isValidAddress || tokenAmount <= 0 || isInsufficientFunds) return;
-    
-    if (!isKnownContact) {
-      setShowPasswordModal(true);
-    } else {
-      executeSend();
-    }
+    if (!isKnownContact) setShowPasswordModal(true);
+    else executeSend();
   };
 
   const handleConfirmPassword = async (e) => {
@@ -156,18 +132,19 @@ export default function Send() {
   };
 
   const handleGoToBook = () => {
-    navigate(`/address-book?returnTo=send&token=${selectedToken.address}`);
+    // Si ya hay una dirección escrita, la pasamos a la libreta por si el usuario quiere guardarla
+    const addrParam = recipient ? `&address=${recipient}` : '';
+    navigate(`/address-book?returnTo=send&token=${selectedToken.address}${addrParam}`);
   };
 
-  // NUEVA NAVEGACIÓN A ASSETS
+  // AQUÍ ESTÁ LA MAGIA: Pasamos la dirección actual a la página de Assets
   const handleGoToAssets = () => {
-    navigate('/assets?returnTo=send');
+    const addrParam = recipient ? `&address=${recipient}` : '';
+    navigate(`/assets?returnTo=send${addrParam}`);
   };
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-24">
-      
-      {/* HEADER */}
       <header className="p-4 flex items-center justify-between bg-gray-950 z-10">
         <button onClick={() => navigate(-1)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
           <ChevronLeft size={20} />
@@ -182,8 +159,6 @@ export default function Send() {
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto flex flex-col">
-        
-        {/* ÁREA CENTRAL */}
         <div className="flex-1 flex flex-col items-center justify-center my-8 relative">
           <div className="flex items-center justify-center w-full relative">
             <div className="absolute left-0 flex flex-col space-y-2">
@@ -220,9 +195,7 @@ export default function Send() {
           </div>
         </div>
 
-        {/* TARJETA DE CONFIGURACIÓN */}
         <div className="bg-gray-900 rounded-3xl border border-white/5 overflow-hidden">
-          {/* SELECTOR DE TOKEN (Navega a Assets) */}
           <button 
             onClick={handleGoToAssets}
             className="w-full flex items-center justify-between p-4 border-b border-white/5 hover:bg-white/5 transition-colors"
@@ -242,7 +215,6 @@ export default function Send() {
             </div>
           </button>
 
-          {/* Fila: Dirección */}
           <div className="p-4">
             <div className="flex items-center space-x-3">
               {isValidAddress ? (
@@ -281,10 +253,8 @@ export default function Send() {
               </div>
             </div>
           </div>
-
         </div>
 
-        {/* BOTÓN DE ENVÍO */}
         <div className="mt-8 mb-4">
           <button 
             onClick={handleSendClick}
@@ -298,10 +268,8 @@ export default function Send() {
             {isLoading ? 'Procesando...' : 'Enviar'}
           </button>
         </div>
-
       </main>
 
-      {/* MODAL: CONTRASEÑA */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-900 border border-red-500/30 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -328,13 +296,11 @@ export default function Send() {
         </div>
       )}
 
-      {/* MODAL: GUARDAR DIRECCIÓN */}
       <AddressModal 
         isOpen={showAddressModal} 
         onClose={() => setShowAddressModal(false)} 
         contactToEdit={{ address: recipient, label: '', note: '', isFavorite: false }} 
       />
-
     </div>
   );
-              }
+    }
