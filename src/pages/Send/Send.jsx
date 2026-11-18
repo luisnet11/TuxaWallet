@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronDown, Clipboard, BookUser, ArrowUpRight, X, CheckCircle2, UserPlus } from 'lucide-react';
-import { isAddress, parseEther, parseUnits, formatUnits, formatEther } from 'viem';
+import { ChevronLeft, ChevronDown, Clipboard, BookUser, ArrowUpRight, X, CheckCircle2, UserPlus, AlertCircle } from 'lucide-react';
+import { isAddress } from 'viem';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { useAddressBookStore } from '../../store/useAddressBookStore.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
@@ -12,11 +12,16 @@ import AddressModal from '../../components/AddressModal.jsx';
 export default function Send() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { activeAccount, trackedTokens, vaultBlob, sendNativeTransaction, sendERC20Token, fetchActiveAccountBalance, fetchERC20Balance } = useWalletStore();
+  const { 
+    activeAccount, trackedTokens, vaultBlob, 
+    sendNativeTransaction, sendERC20Token, 
+    fetchActiveAccountBalance, fetchERC20Balance 
+  } = useWalletStore();
   const { contacts } = useAddressBookStore();
 
   // Estados de UI
-  const [selectedToken, setSelectedToken] = useState(null);
+  const [selectedToken, setSelectedToken] = useState({ address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 });
+  const [tokenBalance, setTokenBalance] = useState('0.0000');
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isFiatMode, setIsFiatMode] = useState(false);
@@ -30,16 +35,19 @@ export default function Send() {
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  // 1. Cargar datos iniciales y leer si viene una dirección de la libreta
+  const allTokens = [{ address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 }, ...trackedTokens];
+
+  // 1. Cargar datos iniciales
   useEffect(() => {
     const addressFromBook = searchParams.get('address');
     if (addressFromBook) setRecipient(addressFromBook);
 
-    // Iniciar con ETH nativo por defecto
-    const ethToken = { address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 };
-    setSelectedToken(ethToken);
+    const tokenFromUrl = searchParams.get('token');
+    if (tokenFromUrl) {
+      const foundToken = allTokens.find(t => t.address === tokenFromUrl);
+      if (foundToken) setSelectedToken(foundToken);
+    }
 
-    // Cargar precios para la conversión Fiat
     const loadPrices = async () => {
       const tokenAddrs = ['native', ...trackedTokens.map(t => t.address)];
       const fetchedPrices = await fetchTokenPrices(tokenAddrs, 'usd');
@@ -48,9 +56,21 @@ export default function Send() {
     loadPrices();
   }, [searchParams, trackedTokens]);
 
-  if (!selectedToken) return null;
+  // 2. Cargar el balance real cada vez que cambia el token
+  useEffect(() => {
+    const loadBalance = async () => {
+      if (selectedToken.address === 'native') {
+        const bal = await fetchActiveAccountBalance();
+        setTokenBalance(bal);
+      } else {
+        const bal = await fetchERC20Balance(selectedToken.address);
+        setTokenBalance(bal);
+      }
+    };
+    loadBalance();
+  }, [selectedToken, activeAccount?.address]);
 
-  // 2. Cálculos de conversión
+  // 3. Cálculos
   const currentPrice = prices[selectedToken.symbol] || 0;
   
   const getTokenAmount = () => {
@@ -66,11 +86,15 @@ export default function Send() {
   const tokenAmount = getTokenAmount();
   const fiatAmount = getFiatAmount();
 
-  // 3. Validaciones
+  // 4. Validaciones
   const isValidAddress = isAddress(recipient);
   const isKnownContact = contacts.some(c => c.address.toLowerCase() === recipient.toLowerCase());
   
-  // 4. Manejar Pegar y Max
+  // NUEVA VALIDACIÓN: El monto no debe superar el saldo (usamos un margen de error muy pequeño para decimales flotantes)
+  const availableBalance = parseFloat(tokenBalance) || 0;
+  const isInsufficientFunds = tokenAmount > (availableBalance + 0.000001);
+
+  // 5. Manejar Pegar y Max
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -79,19 +103,16 @@ export default function Send() {
   };
 
   const handleMax = async () => {
+    const bal = parseFloat(tokenBalance);
     if (selectedToken.address === 'native') {
-      const balStr = await fetchActiveAccountBalance();
-      const bal = parseFloat(balStr);
-      // Reservar un pequeño margen para el gas (ej. 0.001 ETH)
-      const max = Math.max(0, bal - 0.001);
+      const max = Math.max(0, bal - 0.001); // Reservar gas
       setAmount(isFiatMode ? (max * currentPrice).toFixed(2) : max.toString());
     } else {
-      const balStr = await fetchERC20Balance(selectedToken.address);
-      setAmount(isFiatMode ? (parseFloat(balStr) * currentPrice).toFixed(2) : balStr);
+      setAmount(isFiatMode ? (bal * currentPrice).toFixed(2) : tokenBalance);
     }
   };
 
-  // 5. Ejecutar Envío (Con o sin contraseña)
+  // 6. Ejecutar Envío
   const executeSend = async () => {
     setIsLoading(true);
     try {
@@ -116,9 +137,9 @@ export default function Send() {
   };
 
   const handleSendClick = () => {
-    if (!isValidAddress || tokenAmount <= 0) return;
+    // Doble verificación de seguridad
+    if (!isValidAddress || tokenAmount <= 0 || isInsufficientFunds) return;
     
-    // Motor de seguridad: Si NO es contacto conocido, pedir contraseña
     if (!isKnownContact) {
       setShowPasswordModal(true);
     } else {
@@ -130,16 +151,16 @@ export default function Send() {
     e.preventDefault();
     setPasswordError('');
     try {
-      // Verificamos que la contraseña sea correcta intentando descifrar el vault
-      await unlockWallet(vaultBlob, password);
-      // Si no lanza error, la contraseña es correcta
+      await unlockWallet(vaultBlob, password); // Verifica contraseña
       executeSend();
     } catch (err) {
       setPasswordError('Contraseña incorrecta. Intenta de nuevo.');
     }
   };
 
-  const allTokens = [{ address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 }, ...trackedTokens];
+  const handleGoToBook = () => {
+    navigate(`/address-book?returnTo=send&token=${selectedToken.address}`);
+  };
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-24">
@@ -155,16 +176,14 @@ export default function Send() {
           </div>
           <span className="font-bold text-sm">{selectedToken.name}</span>
         </div>
-        <div className="w-10"></div> {/* Espaciador */}
+        <div className="w-10"></div>
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto flex flex-col">
         
-        {/* ÁREA CENTRAL DE MONTO */}
+        {/* ÁREA CENTRAL */}
         <div className="flex-1 flex flex-col items-center justify-center my-8 relative">
-          
           <div className="flex items-center justify-center w-full relative">
-            {/* Botones Izquierda */}
             <div className="absolute left-0 flex flex-col space-y-2">
               <button onClick={handleMax} className="bg-gray-900 text-xs font-bold px-3 py-2 rounded-full border border-white/10 hover:bg-gray-800">
                 MAX
@@ -177,26 +196,31 @@ export default function Send() {
               </button>
             </div>
 
-            {/* Input Principal */}
             <input 
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0"
-              className="text-6xl font-bold bg-transparent text-center outline-none w-full max-w-[200px] placeholder-gray-700"
+              className={`text-6xl font-bold bg-transparent text-center outline-none w-full max-w-[200px] placeholder-gray-700 ${isInsufficientFunds ? 'text-red-400' : 'text-white'}`}
               autoFocus
             />
           </div>
 
-          <p className="text-gray-400 font-medium mt-2">
-            {isFiatMode ? `~ ${tokenAmount.toFixed(4)} ${selectedToken.symbol}` : `~ $${fiatAmount.toFixed(2)} USD`}
-          </p>
+          <div className="text-center mt-2">
+            <p className="text-gray-400 font-medium">
+              {isFiatMode ? `~ ${tokenAmount.toFixed(4)} ${selectedToken.symbol}` : `~ $${fiatAmount.toFixed(2)} USD`}
+            </p>
+            {/* MENSAJE DE ERROR POR FONDOS INSUFICIENTES */}
+            {isInsufficientFunds && (
+              <p className="text-red-400 text-xs font-bold mt-1 flex items-center justify-center gap-1">
+                <AlertCircle size={12} /> Saldo insuficiente
+              </p>
+            )}
+          </div>
         </div>
 
         {/* TARJETA DE CONFIGURACIÓN */}
         <div className="bg-gray-900 rounded-3xl border border-white/5 overflow-hidden">
-          
-          {/* Fila: Selector de Token */}
           <button 
             onClick={() => setShowTokenModal(true)}
             className="w-full flex items-center justify-between p-4 border-b border-white/5 hover:bg-white/5 transition-colors"
@@ -207,7 +231,7 @@ export default function Send() {
               </div>
               <div className="text-left">
                 <p className="font-bold text-sm">{selectedToken.symbol}</p>
-                <p className="text-xs text-gray-400">Balance: {selectedToken.symbol === 'ETH' ? '...' : '...'}</p>
+                <p className="text-xs text-gray-400">Balance: {tokenBalance}</p>
               </div>
             </div>
             <div className="flex items-center space-x-2">
@@ -249,7 +273,7 @@ export default function Send() {
                 <button onClick={handlePaste} className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-lg">
                   <Clipboard size={16} />
                 </button>
-                <button onClick={() => navigate('/address-book?returnTo=send')} className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-lg">
+                <button onClick={handleGoToBook} className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-lg">
                   <BookUser size={16} />
                 </button>
               </div>
@@ -262,9 +286,9 @@ export default function Send() {
         <div className="mt-8 mb-4">
           <button 
             onClick={handleSendClick}
-            disabled={!isValidAddress || tokenAmount <= 0 || isLoading}
+            disabled={!isValidAddress || tokenAmount <= 0 || isLoading || isInsufficientFunds}
             className={`w-full font-bold py-4 rounded-2xl transition-all ${
-              isValidAddress && tokenAmount > 0 && !isLoading
+              isValidAddress && tokenAmount > 0 && !isLoading && !isInsufficientFunds
                 ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_20px_rgba(147,51,234,0.3)]'
                 : 'bg-gray-800 text-gray-500 cursor-not-allowed'
             }`}
@@ -302,7 +326,7 @@ export default function Send() {
         </div>
       )}
 
-      {/* MODAL: CONTRASEÑA (Motor de Seguridad) */}
+      {/* MODAL: CONTRASEÑA */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-900 border border-red-500/30 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -338,4 +362,4 @@ export default function Send() {
 
     </div>
   );
-      }
+}
