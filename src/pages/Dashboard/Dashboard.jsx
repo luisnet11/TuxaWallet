@@ -32,6 +32,7 @@ export default function Dashboard() {
   const [copied, setCopied] = useState(false);
   const menuRef = useRef(null);
 
+  // Cerrar menú al hacer clic fuera
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -42,6 +43,7 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Carga de datos con protección contra condiciones de carrera
   useEffect(() => {
     if (!activeAccount?.address) return;
     let isCancelled = false;
@@ -105,6 +107,9 @@ export default function Dashboard() {
     total += parseFloat(ethBalance) * ethPrice;
 
     trackedTokens.forEach(token => {
+      // Excluimos el contrato de ETH puenteado del cálculo total
+      if (token.address.toLowerCase() === '0x5a524251df27a25ac6b9964a93e1c23ad692688d') return;
+      
       const bal = parseFloat(tokenBalances[token.symbol] || '0');
       const price = prices[token.symbol] || 0;
       total += bal * price;
@@ -315,7 +320,11 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {trackedTokens.slice(0, 4).map(token => (
+                {/* FILTRO DE SEGURIDAD APLICADO AQUÍ */}
+                {trackedTokens
+                  .filter(t => t.address.toLowerCase() !== '0x5a524251df27a25ac6b9964a93e1c23ad692688d')
+                  .slice(0, 4)
+                  .map(token => (
                   <div key={token.address} className="bg-gray-900 border border-white/5 rounded-2xl p-3 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">
@@ -405,4 +414,4 @@ export default function Dashboard() {
       </nav>
     </div>
   );
-          }
+      }
