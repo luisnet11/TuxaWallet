@@ -20,7 +20,6 @@ export default function Dashboard() {
     trackedTokens, fetchERC20Balance, setActiveAccount, addNewAccount, isUnlocked 
   } = useWalletStore();
 
-  // Estados locales
   const [ethBalance, setEthBalance] = useState('0.0000');
   const [tokenBalances, setTokenBalances] = useState({});
   const [prices, setPrices] = useState({});
@@ -29,12 +28,10 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [hideBalance, setHideBalance] = useState(false);
   
-  // Estados de UI
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const menuRef = useRef(null);
 
-  // Cerrar menú al hacer clic fuera
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -45,16 +42,13 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Carga de datos con protección contra condiciones de carrera y fallos individuales
   useEffect(() => {
     if (!activeAccount?.address) return;
     let isCancelled = false;
     
     const loadData = async () => {
       setIsLoading(true);
-      
       try {
-        // Usamos allSettled para que si una API falla, las demás sigan funcionando
         const results = await Promise.allSettled([
           fetchActiveAccountBalance(),
           Promise.all(trackedTokens.map(token => fetchERC20Balance(token.address))),
@@ -82,7 +76,6 @@ export default function Dashboard() {
           if (realHistory.length > 0) {
             setHistory(realHistory.slice(0, 3));
           } else if (import.meta.env.DEV) {
-             // Datos de prueba SOLO en desarrollo
              setHistory([
               { hash: '0x123', type: 'send', method: 'Transferencia', amount: '0.5', symbol: 'ETH', timestamp: new Date().toISOString(), isSender: true, status: 'ok', to: '0x8a...12f' }
              ]);
@@ -104,7 +97,6 @@ export default function Dashboard() {
     return () => { isCancelled = true; };
   }, [activeAccount?.address, trackedTokens.length]);
 
-  // PROTECCIÓN: No renderizar si no hay sesión
   if (!isUnlocked) return null;
 
   const calculateTotalUsd = () => {
@@ -135,7 +127,6 @@ export default function Dashboard() {
   const renderGasThermometer = () => {
     if (!gasStatus) return null;
     
-    // 1. API falló o la red no está configurada: Mantenemos el diseño verde, pero con un ícono sutil
     if (!gasStatus.success) {
       return (
         <div className="relative bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
@@ -151,7 +142,6 @@ export default function Dashboard() {
       );
     }
 
-    // 2. API responde "Ilimitado"
     if (gasStatus.data?.tier === 'Unlimited') {
       return (
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex flex-col items-center justify-center h-full w-28">
@@ -164,7 +154,6 @@ export default function Dashboard() {
       );
     }
 
-    // 3. API responde con un número límite
     const remaining = gasStatus.data.remainingFreeTransactions || 0;
     const percent = Math.min((remaining / 50) * 100, 100);
 
@@ -189,7 +178,7 @@ export default function Dashboard() {
             className="flex items-center space-x-3 p-1 rounded-lg hover:bg-white/5 transition-colors text-left"
             onClick={() => setShowAccountMenu(!showAccountMenu)}
           >
-            <AccountAvatar address={activeAccount?.address} size={40} style="identicon" />
+            <AccountAvatar address={activeAccount?.address} size={40} />
             <div>
               <p className="text-xs text-gray-400 flex items-center gap-1">
                 Cuenta Activa <ChevronDown size={12} />
@@ -218,7 +207,7 @@ export default function Dashboard() {
                     onClick={() => { setActiveAccount(acc.index); setShowAccountMenu(false); }}
                     className={`w-full text-left flex items-center space-x-3 p-2 rounded-lg transition-colors ${activeAccount?.index === acc.index ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-white/5'}`}
                   >
-                    <AccountAvatar address={acc.address} size={28} style="identicon" />
+                    <AccountAvatar address={acc.address} size={28} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">Cuenta {acc.index}</p>
                       <p className="text-xs text-gray-400 truncate">{acc.address}</p>
@@ -226,13 +215,19 @@ export default function Dashboard() {
                   </button>
                 ))}
               </div>
-              <div className="border-t border-white/10 p-2">
+              <div className="border-t border-white/10 p-2 flex flex-col space-y-1">
                 <button 
                   onClick={() => { addNewAccount(); setShowAccountMenu(false); }}
                   className="w-full flex items-center justify-center space-x-2 p-2 text-sm text-purple-400 hover:bg-white/5 rounded-lg transition-colors"
                 >
                   <Plus size={16} />
                   <span>Crear nueva cuenta</span>
+                </button>
+                <button 
+                  onClick={() => { navigate('/address-book'); setShowAccountMenu(false); }}
+                  className="w-full flex items-center justify-center space-x-2 p-2 text-sm text-gray-300 hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <span>📖 Libreta de direcciones</span>
                 </button>
               </div>
             </div>
@@ -344,7 +339,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* RECIENTE (Máximo 3) */}
+        {/* RECIENTE */}
         <div className="mt-8">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-bold">Reciente</h3>
@@ -410,4 +405,4 @@ export default function Dashboard() {
       </nav>
     </div>
   );
-        }
+          }
