@@ -13,7 +13,6 @@ export default function AddressBook() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [contactToEdit, setContactToEdit] = useState(null);
 
-  // Filtrado instantáneo y ordenamiento (Favoritos primero)
   const filteredContacts = useMemo(() => {
     const term = searchTerm.toLowerCase();
     
@@ -26,7 +25,7 @@ export default function AddressBook() {
       .sort((a, b) => {
         if (a.isFavorite && !b.isFavorite) return -1;
         if (!a.isFavorite && b.isFavorite) return 1;
-        return 0; // Mantiene el orden de inserción (más recientes primero)
+        return 0;
       });
   }, [contacts, searchTerm]);
 
@@ -36,7 +35,7 @@ export default function AddressBook() {
   };
 
   const handleEdit = (e, contact) => {
-    e.stopPropagation(); // Evitar que se dispare el clic de la tarjeta
+    e.stopPropagation();
     setContactToEdit(contact);
     setIsModalOpen(true);
   };
@@ -54,14 +53,12 @@ export default function AddressBook() {
   };
 
   const handleSelectContact = (address) => {
-    // Redirige a la pantalla de enviar con la dirección precargada
     navigate(`/send?address=${address}`);
   };
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-24">
       
-      {/* HEADER */}
       <header className="p-4 flex items-center space-x-3 bg-gray-950 z-10 sticky top-0">
         <button onClick={() => navigate(-1)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
           <ChevronLeft size={20} />
@@ -74,7 +71,6 @@ export default function AddressBook() {
 
       <main className="flex-1 px-4 overflow-y-auto">
         
-        {/* BUSCADOR */}
         <div className="relative mb-6">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input 
@@ -86,7 +82,6 @@ export default function AddressBook() {
           />
         </div>
 
-        {/* LISTA DE CONTACTOS */}
         <div className="space-y-3">
           {filteredContacts.length === 0 ? (
             <div className="text-center py-10">
@@ -99,9 +94,8 @@ export default function AddressBook() {
                 onClick={() => handleSelectContact(contact.address)}
                 className="bg-gray-900 border border-white/5 rounded-2xl p-3 flex items-center space-x-3 cursor-pointer hover:bg-gray-800 transition-colors group"
               >
-                {/* Avatar */}
                 <div className="relative">
-                  <AccountAvatar address={contact.address} size={40} style="identicon" />
+                  <AccountAvatar address={contact.address} size={40} />
                   <button 
                     onClick={(e) => handleFavorite(e, contact.id)}
                     className={`absolute -top-1 -right-1 p-1 rounded-full bg-gray-800 border border-gray-700 ${contact.isFavorite ? 'text-yellow-400' : 'text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity'}`}
@@ -110,14 +104,12 @@ export default function AddressBook() {
                   </button>
                 </div>
 
-                {/* Textos */}
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm truncate">{contact.label}</p>
                   <p className="text-xs text-gray-400 font-mono">{truncateAddress(contact.address)}</p>
                   {contact.note && <p className="text-xs text-gray-500 truncate mt-0.5">{contact.note}</p>}
                 </div>
 
-                {/* Acciones Rápidas */}
                 <div className="flex flex-col space-y-2">
                   <button onClick={(e) => handleEdit(e, contact)} className="text-gray-400 hover:text-purple-400 p-1">
                     <Edit2 size={16} />
@@ -132,7 +124,6 @@ export default function AddressBook() {
         </div>
       </main>
 
-      {/* BOTÓN FLOTANTE (CTA) */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-4 bg-gradient-to-t from-gray-950 to-transparent z-20">
         <button 
           onClick={() => { setContactToEdit(null); setIsModalOpen(true); }}
@@ -143,7 +134,6 @@ export default function AddressBook() {
         </button>
       </div>
 
-      {/* MODAL */}
       <AddressModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
@@ -151,4 +141,4 @@ export default function AddressBook() {
       />
     </div>
   );
-            }
+}
