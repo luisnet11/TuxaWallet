@@ -1,27 +1,7 @@
-/**
- * ============================================================================
- *  TUXAWALLET — Cliente Viem para Tuxachain
- * ============================================================================
- *  Archivo:   src/services/viemClient.js
- *  Propósito: Exponer el "puente vivo" entre TuxaWallet y Tuxachain.
- *             Aquí Viem deja de ser configuración y empieza a ejecutar
- *             lecturas (publicClient) y prepara firmas (walletClient).
- *
- *  DISEÑO DE SEGURIDAD (CRÍTICO):
- *  1) publicClient  → SINGLETON. Solo lectura, sin llaves. Seguro reutilizar.
- *  2) walletClient  → FÁBRICA BAJO DEMANDA. Recibe una `account` (descifrada
- *                     desde /src/vault), se usa para UNA operación de firma
- *                     y se descarta. La llave privada NO vive en memoria
- *                     más tiempo del estrictamente necesario.
- *  3) NO se guarda, cifra ni persiste ninguna llave aquí. Eso es /src/vault.
- *  4) NO se inyecta window.ethereum aquí. Eso es walletProvider.js.
- * ============================================================================
- */
-
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { tuxachain, TUXACHAIN_RPC_URL } from './tuxachain.config.js';
 
-// ABI mínimo del estándar ERC-20 para leer y transferir tokens
+// ABI mínimo del estándar ERC-20
 export const ERC20_ABI = [
   { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
   { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
@@ -32,7 +12,11 @@ export const ERC20_ABI = [
 
 const _publicClient = createPublicClient({
   chain: tuxachain,
-  transport: http(TUXACHAIN_RPC_URL, { retryCount: 2, timeout: 20_000 }),
+  transport: http(TUXACHAIN_RPC_URL, { 
+    retryCount: 2, 
+    timeout: 20_000,
+    batch: true, // <-- ACTIVADO POR DIAGNÓSTICO
+  }),
 });
 
 export function getTuxaPublicClient() {
@@ -43,12 +27,15 @@ export function createTuxaWalletClient(account) {
   if (!account) throw new Error('[TuxaWallet] Se requiere una cuenta para firmar.');
   return createWalletClient({
     chain: tuxachain,
-    transport: http(TUXACHAIN_RPC_URL, { retryCount: 1, timeout: 30_000 }),
+    transport: http(TUXACHAIN_RPC_URL, { 
+      retryCount: 1, 
+      timeout: 30_000,
+      batch: true, // <-- ACTIVADO POR DIAGNÓSTICO
+    }),
     account,
   });
 }
 
-// ... (aquí se mantienen tus funciones buildAddEthereumChainParams, etc. que ya tenías)
 export const TUXACHAIN_CHAIN_ID_HEX = '0x4E4542E3';
 export const TUXACHAIN_CHAIN_ID = 1313161955;
 
