@@ -48,7 +48,7 @@ export const useWalletStore = create(
             pendingWallet: null,
             isUnlocked: true,
             activeAccount: pendingWallet.accounts[0],
-            trackedTokens: DEFAULT_TOKENS,
+            trackedTokens: DEFAULT_TOKENS, // <-- Solo los tokens ERC-20, sin ETH
           });
         }
       },
@@ -62,7 +62,7 @@ export const useWalletStore = create(
             isUnlocked: true,
             mnemonicSession: cleanMnemonic,
             activeAccount: vaultBlob.accounts[0],
-            trackedTokens: DEFAULT_TOKENS,
+            trackedTokens: DEFAULT_TOKENS, // <-- Solo los tokens ERC-20, sin ETH
             isLoading: false,
           });
         } catch (err) {
@@ -139,6 +139,7 @@ export const useWalletStore = create(
         if (account) set({ activeAccount: account, error: null });
       },
 
+      // SALDO NATIVO (Única fuente de verdad para ETH)
       fetchActiveAccountBalance: async () => {
         const { activeAccount } = get();
         if (!activeAccount) return '0.0000';
@@ -146,7 +147,6 @@ export const useWalletStore = create(
           const client = getTuxaPublicClient();
           const balanceWei = await client.getBalance({ address: activeAccount.address });
           const formatted = formatEther(balanceWei);
-          // CORRECCIÓN: Truncar a 4 decimales para el saldo nativo
           return parseFloat(formatted).toFixed(4);
         } catch (err) {
           console.error(err);
@@ -193,9 +193,6 @@ export const useWalletStore = create(
             args: [activeAccount.address],
           });
           const formatted = formatUnits(balanceWei, token.decimals);
-          
-          // CORRECCIÓN CRÍTICA: Convertimos a número, fijamos 4 decimales y volvemos a string.
-          // Esto elimina los 24 decimales del wNEAR y muestra "1.2345" o "0.0000".
           return parseFloat(formatted).toFixed(4); 
         } catch (err) {
           console.error(err);
