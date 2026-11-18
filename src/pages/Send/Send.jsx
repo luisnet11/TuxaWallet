@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronDown, Clipboard, BookUser, ArrowUpRight, X, CheckCircle2, UserPlus, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Clipboard, BookUser, ArrowUpRight, AlertCircle, UserPlus } from 'lucide-react';
 import { isAddress } from 'viem';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { useAddressBookStore } from '../../store/useAddressBookStore.js';
@@ -25,7 +25,6 @@ export default function Send() {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isFiatMode, setIsFiatMode] = useState(false);
-  const [showTokenModal, setShowTokenModal] = useState(false);
   const [prices, setPrices] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   
@@ -56,7 +55,7 @@ export default function Send() {
     loadPrices();
   }, [searchParams, trackedTokens]);
 
-  // 2. Cargar el balance real cada vez que cambia el token
+  // 2. Cargar balance real
   useEffect(() => {
     const loadBalance = async () => {
       if (selectedToken.address === 'native') {
@@ -90,7 +89,6 @@ export default function Send() {
   const isValidAddress = isAddress(recipient);
   const isKnownContact = contacts.some(c => c.address.toLowerCase() === recipient.toLowerCase());
   
-  // NUEVA VALIDACIÓN: El monto no debe superar el saldo (usamos un margen de error muy pequeño para decimales flotantes)
   const availableBalance = parseFloat(tokenBalance) || 0;
   const isInsufficientFunds = tokenAmount > (availableBalance + 0.000001);
 
@@ -137,7 +135,6 @@ export default function Send() {
   };
 
   const handleSendClick = () => {
-    // Doble verificación de seguridad
     if (!isValidAddress || tokenAmount <= 0 || isInsufficientFunds) return;
     
     if (!isKnownContact) {
@@ -151,7 +148,7 @@ export default function Send() {
     e.preventDefault();
     setPasswordError('');
     try {
-      await unlockWallet(vaultBlob, password); // Verifica contraseña
+      await unlockWallet(vaultBlob, password);
       executeSend();
     } catch (err) {
       setPasswordError('Contraseña incorrecta. Intenta de nuevo.');
@@ -160,6 +157,11 @@ export default function Send() {
 
   const handleGoToBook = () => {
     navigate(`/address-book?returnTo=send&token=${selectedToken.address}`);
+  };
+
+  // NUEVA NAVEGACIÓN A ASSETS
+  const handleGoToAssets = () => {
+    navigate('/assets?returnTo=send');
   };
 
   return (
@@ -210,7 +212,6 @@ export default function Send() {
             <p className="text-gray-400 font-medium">
               {isFiatMode ? `~ ${tokenAmount.toFixed(4)} ${selectedToken.symbol}` : `~ $${fiatAmount.toFixed(2)} USD`}
             </p>
-            {/* MENSAJE DE ERROR POR FONDOS INSUFICIENTES */}
             {isInsufficientFunds && (
               <p className="text-red-400 text-xs font-bold mt-1 flex items-center justify-center gap-1">
                 <AlertCircle size={12} /> Saldo insuficiente
@@ -221,8 +222,9 @@ export default function Send() {
 
         {/* TARJETA DE CONFIGURACIÓN */}
         <div className="bg-gray-900 rounded-3xl border border-white/5 overflow-hidden">
+          {/* SELECTOR DE TOKEN (Navega a Assets) */}
           <button 
-            onClick={() => setShowTokenModal(true)}
+            onClick={handleGoToAssets}
             className="w-full flex items-center justify-between p-4 border-b border-white/5 hover:bg-white/5 transition-colors"
           >
             <div className="flex items-center space-x-3">
@@ -299,33 +301,6 @@ export default function Send() {
 
       </main>
 
-      {/* MODAL: SELECCIÓN DE TOKEN */}
-      {showTokenModal && (
-        <div className="fixed inset-0 bg-black/80 flex flex-col justify-end z-50">
-          <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl p-6 h-[60vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Seleccionar Token</h2>
-              <button onClick={() => setShowTokenModal(false)} className="text-gray-400 hover:text-white"><X size={24}/></button>
-            </div>
-            <div className="overflow-y-auto flex-1 space-y-2">
-              {allTokens.map(token => (
-                <button
-                  key={token.address}
-                  onClick={() => { setSelectedToken(token); setShowTokenModal(false); }}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${selectedToken.address === token.address ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-white/5'}`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center text-xs font-bold">{token.symbol[0]}</div>
-                    <span className="font-bold text-sm">{token.symbol}</span>
-                  </div>
-                  {selectedToken.address === token.address && <CheckCircle2 size={16} className="text-purple-400" />}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* MODAL: CONTRASEÑA */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
@@ -362,4 +337,4 @@ export default function Send() {
 
     </div>
   );
-}
+              }
