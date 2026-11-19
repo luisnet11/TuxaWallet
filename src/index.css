@@ -1,51 +1,56 @@
 @import "tailwindcss";
+
 @plugin "daisyui" {
-  themes: false;
+  themes: dark --default;
 }
 
-@plugin "daisyui/theme" {
-  name: "tuxa";
-  default: true;
-  prefersdark: true;
-  color-scheme: dark;
-
+/* 
+ * Configuración de colores personalizados para TuxaWallet (Tailwind v4)
+ * Usamos las variables CSS nativas de DaisyUI
+ */
+:root {
+  /* Colores base oscuros (Morado muy oscuro) */
   --color-base-100: oklch(16% 0.04 295);
   --color-base-200: oklch(20% 0.05 295);
   --color-base-300: oklch(26% 0.06 295);
   --color-base-content: oklch(94% 0.02 300);
 
+  /* Color primario (Morado vibrante) */
   --color-primary: oklch(62% 0.22 295);
   --color-primary-content: oklch(98% 0.01 300);
+
+  /* Color secundario (Lila) */
   --color-secondary: oklch(74% 0.16 310);
   --color-secondary-content: oklch(18% 0.04 295);
+
+  /* Color de acento (Cian neón) */
   --color-accent: oklch(80% 0.13 200);
   --color-accent-content: oklch(18% 0.04 295);
+
+  /* Colores neutrales y de estado */
   --color-neutral: oklch(24% 0.05 295);
   --color-neutral-content: oklch(92% 0.02 300);
-
   --color-info: oklch(72% 0.14 240);
-  --color-info-content: oklch(18% 0.04 295);
   --color-success: oklch(72% 0.17 155);
-  --color-success-content: oklch(18% 0.04 295);
   --color-warning: oklch(82% 0.16 80);
-  --color-warning-content: oklch(22% 0.05 70);
   --color-error: oklch(64% 0.22 22);
   --color-error-content: oklch(98% 0.01 20);
+}
 
+/* Variables de Radios y Bordes */
+:root {
   --radius-selector: 0.75rem;
   --radius-field: 0.75rem;
   --radius-box: 1.25rem;
   --border: 1px;
-  --depth: 1;
-  --noise: 0;
 }
 
-html,
-body,
-#root {
-  min-height: 100%;
-}
-
+/* Configuración básica del body */
 body {
-  @apply bg-base-100 text-base-content antialiased;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-base-100);
+  color: var(--color-base-content);
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
