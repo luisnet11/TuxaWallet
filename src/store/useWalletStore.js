@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { parseEther, parseUnits, formatUnits, formatEther, isAddress } from 'viem';
+import { parseEther, parseUnits, formatUnits, formatEther, isAddress, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
   createNewWallet,
@@ -14,10 +14,11 @@ import { DEFAULT_TOKENS } from '../config/tokens.config.js';
 
 // Función auxiliar para formatear números sin perder precisión en saldos pequeños
 function formatBalance(valueStr) {
+  if (valueStr === null || valueStr === undefined) return null;
   const num = parseFloat(valueStr);
   if (num === 0) return '0.0000';
   if (num < 0.000001) return '< 0.000001'; // Es polvo (dust)
-  if (num < 0.01) return num.toFixed(6);   // Saldos muy pequeños (ej. el wNEAR que tienes)
+  if (num < 0.01) return num.toFixed(6);   // Saldos muy pequeños
   return num.toFixed(4);                   // Saldos normales
 }
 
@@ -155,7 +156,7 @@ export const useWalletStore = create(
           const client = getTuxaPublicClient();
           const balanceWei = await client.getBalance({ address: activeAccount.address });
           const formatted = formatEther(balanceWei);
-          return formatBalance(formatted); // Usa el formateador inteligente
+          return formatBalance(formatted);
         } catch (err) {
           console.error('[TuxaWallet] Error RPC saldo nativo:', err);
           return null; 
@@ -201,7 +202,7 @@ export const useWalletStore = create(
             args: [activeAccount.address],
           });
           const formatted = formatUnits(balanceWei, token.decimals);
-          return formatBalance(formatted); // Usa el formateador inteligente
+          return formatBalance(formatted);
         } catch (err) {
           console.error(`[TuxaWallet] Error RPC token ${token.symbol}:`, err);
           return null; 
@@ -248,6 +249,7 @@ export const useWalletStore = create(
         }
       },
 
+      // CORRECCIÓN: sendERC20Token con encodeFunctionData
       sendERC20Token: async (tokenAddress, toAddress, amount, dryRun = false) => {
         const { isUnlocked, mnemonicSession, activeAccount, trackedTokens } = get();
         if (!isUnlocked || !mnemonicSession) throw new Error('Billetera bloqueada.');
@@ -264,19 +266,33 @@ export const useWalletStore = create(
           const { privateKey } = deriveAccount(mnemonicSession, activeAccount.index);
           const account = privateKeyToAccount(privateKey);
           const walletClient = createTuxaWalletClient(account);
+          const publicClient = getTuxaPublicClient();
 
           const parsedAmount = parseUnits(amount, token.decimals);
-          const tx = {
-            address: tokenAddress, abi: ERC20_ABI, functionName: 'transfer',
-            args: [toAddress, parsedAmount], account, type: 'legacy',
-          };
+          
+          // 1. Codificamos la llamada al contrato (transfer)
+          const data = encodeFunctionData({
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [toAddress, parsedAmount]
+          });
+
+          // 2. Preparamos la transacción (esto calcula el gas, nonce, etc. para eth_call)
+          const preparedTx = await publicClient.prepareTransactionRequest({
+            to: tokenAddress,
+            data,
+            account,
+            type: 'legacy'
+          });
 
           if (dryRun) {
-            const signedTx = await walletClient.signTransaction(tx);
+            // 3. Firmamos la transacción preparada
+            const signedTx = await walletClient.signTransaction(preparedTx);
             set({ isLoading: false });
             return { success: true, hash: signedTx, message: `✅ Firma ERC-20 (${token.symbol}) exitosa (Dry Run).` };
           } else {
-            const hash = await walletClient.writeContract(tx);
+            // 3. Enviamos la transacción preparada
+            const hash = await walletClient.sendTransaction(preparedTx);
             set({ isLoading: false });
             return { success: true, hash, message: `✅ Transferencia de ${token.symbol} enviada.` };
           }
