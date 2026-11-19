@@ -87,7 +87,35 @@ export async function unlockWallet(vaultBlob, password) {
   const key = await deriveKey(password, vaultBlob.salt);
   const aad = `${AAD_PREFIX}|${vaultBlob.id}`;
   const mnemonic = await decryptData(vaultBlob.ciphertext, key, vaultBlob.iv, aad);
-  return { mnemonic, key };
+
+  // Integridad de direcciones: `accounts` vive en claro en localStorage y NO está autenticada por el AAD.
+  // Se recalculan desde la semilla (una sola derivación de seed) y se comparan: si alguien alteró una
+  // dirección guardada (p. ej. para mostrar una dirección de recepción ajena), el desbloqueo falla.
+  const derived = deriveAddresses(mnemonic, vaultBlob.accounts.map((a) => a.index));
+  vaultBlob.accounts.forEach((a, i) => {
+    if (derived[i].toLowerCase() !== a.address.toLowerCase()) {
+      throw new Error('[TuxaWallet] Las direcciones guardadas no coinciden con la semilla (datos alterados).');
+    }
+  });
+
+  return { mnemonic }; // ya no se devuelve la CryptoKey (nadie la usa y alargaba su vida en memoria)
+}
+
+/** Deriva solo direcciones (sin exponer llaves privadas) con UNA sola derivación de seed. */
+export function deriveAddresses(mnemonic, indexes) {
+  const seed = mnemonicToSeedSync(mnemonic);
+  try {
+    const master = HDKey.fromMasterSeed(seed);
+    return indexes.map((i) => {
+      const child = master.derive(`${EVM_DERIVATION_PATH}/${i}`);
+      if (!child.privateKey) throw new Error('[TuxaWallet] Fallo al derivar llave privada.');
+      const address = privateKeyToAccount(bytesToHex(child.privateKey)).address;
+      child.privateKey.fill(0);
+      return address;
+    });
+  } finally {
+    seed.fill(0);
+  }
 }
 
 /* ---------------------------------------------------------------------------
