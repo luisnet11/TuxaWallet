@@ -1,38 +1,96 @@
-import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom'; // <-- NUEVO: useLocation
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useWalletStore } from '../../store/useWalletStore.js';
+
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_TIME_MS = 60 * 1000; // 60 segundos
 
 export default function UnlockWallet() {
   const navigate = useNavigate();
-  const location = useLocation(); // <-- NUEVO
+  const location = useLocation();
   const { unlockExistingWallet, resetWallet, isLoading, error, clearError } = useWalletStore();
 
   const [password, setPassword] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
   const [localError, setLocalError] = useState('');
+  
+  // Estados de Rate Limiting
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(0);
 
-  // NUEVA LÓGICA: Si venimos de una ruta protegida, volvemos allí. Si no, al dashboard.
+  // Ruta de retorno
   const from = location.state?.from?.pathname || '/dashboard';
+
+  // Cargar bloqueo persistente al montar
+  useEffect(() => {
+    const storedLockout = localStorage.getItem('tuxa_lockout_until');
+    const storedAttempts = localStorage.getItem('tuxa_failed_attempts');
+    
+    if (storedLockout && Number(storedLockout) > Date.now()) {
+      setLockoutUntil(Number(storedLockout));
+    }
+    if (storedAttempts) {
+      setFailedAttempts(Number(storedAttempts));
+    }
+  }, []);
+
+  // Temporizador para la cuenta regresiva
+  useEffect(() => {
+    if (lockoutUntil <= Date.now()) return;
+
+    const interval = setInterval(() => {
+      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setLockoutUntil(0);
+        setFailedAttempts(0);
+        localStorage.removeItem('tuxa_lockout_until');
+        localStorage.removeItem('tuxa_failed_attempts');
+        clearInterval(interval);
+      } else {
+        setTimeLeft(remaining);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [lockoutUntil]);
 
   const handleUnlock = async (e) => {
     e.preventDefault();
     setLocalError('');
     clearError();
-    if (!password) return;
+    if (!password || lockoutUntil > Date.now()) return;
 
     try {
       await unlockExistingWallet(password);
-      navigate(from, { replace: true }); // <-- Usamos la ruta guardada
+      // Éxito: Limpiar contadores
+      localStorage.removeItem('tuxa_lockout_until');
+      localStorage.removeItem('tuxa_failed_attempts');
+      navigate(from, { replace: true });
     } catch (err) {
-      // El error se maneja en el store
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+      localStorage.setItem('tuxa_failed_attempts', newAttempts.toString());
+
+      if (newAttempts >= MAX_ATTEMPTS) {
+        const unlockTime = Date.now() + LOCKOUT_TIME_MS;
+        setLockoutUntil(unlockTime);
+        setTimeLeft(60);
+        localStorage.setItem('tuxa_lockout_until', unlockTime.toString());
+        setLocalError('Demasiados intentos fallidos. Billetera bloqueada temporalmente.');
+      }
     }
   };
 
   const handleReset = () => {
     resetWallet();
     setShowResetModal(false);
+    localStorage.removeItem('tuxa_lockout_until');
+    localStorage.removeItem('tuxa_failed_attempts');
     navigate('/welcome');
   };
+
+  const isLockedOut = lockoutUntil > Date.now();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1a0b2e] to-[#0f0518] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -42,14 +100,18 @@ export default function UnlockWallet() {
 
       <div className="w-full max-w-md z-10">
         <div className="flex justify-center mb-8">
-          <div className="w-20 h-20 bg-purple-500/20 border border-purple-500/30 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(147,51,234,0.3)]">
-            <span className="text-4xl">🔒</span>
+          <div className={`w-20 h-20 ${isLockedOut ? 'bg-red-500/20 border-red-500/30' : 'bg-purple-500/20 border-purple-500/30'} border rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(147,51,234,0.3)] transition-colors`}>
+            <span className="text-4xl">{isLockedOut ? '🚫' : '🔒'}</span>
           </div>
         </div>
 
-        <h1 className="text-3xl font-bold mb-2 text-center">Bienvenido de nuevo</h1>
+        <h1 className="text-3xl font-bold mb-2 text-center">
+          {isLockedOut ? 'Bloqueado temporalmente' : 'Bienvenido de nuevo'}
+        </h1>
         <p className="text-gray-400 mb-8 text-sm text-center">
-          Ingresa tu contraseña para desbloquear TuxaWallet.
+          {isLockedOut 
+            ? `Por seguridad, espera ${timeLeft} segundos antes de intentar de nuevo.`
+            : 'Ingresa tu contraseña para desbloquear TuxaWallet.'}
         </p>
 
         {(error || localError) && (
@@ -64,25 +126,31 @@ export default function UnlockWallet() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Contraseña maestra"
-              className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-500 backdrop-blur-md transition-all"
+              placeholder={isLockedOut ? "Bloqueado" : "Contraseña maestra"}
+              disabled={isLockedOut}
+              className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-500 backdrop-blur-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               autoFocus
             />
           </div>
 
           <button
             type="submit"
-            disabled={!password || isLoading}
-            className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(147,51,234,0.3)] disabled:opacity-50 disabled:shadow-none"
+            disabled={!password || isLoading || isLockedOut}
+            className={`w-full font-bold py-4 rounded-xl transition-all ${
+              isLockedOut 
+                ? 'bg-red-900/50 text-red-300 cursor-not-allowed' 
+                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_20px_rgba(147,51,234,0.3)] disabled:opacity-50 disabled:shadow-none'
+            }`}
           >
-            {isLoading ? 'Verificando...' : 'Desbloquear'}
+            {isLoading ? 'Verificando...' : isLockedOut ? `Espera ${timeLeft}s` : 'Desbloquear'}
           </button>
         </form>
 
         <div className="mt-12 text-center">
           <button
             onClick={() => setShowResetModal(true)}
-            className="text-sm text-gray-500 hover:text-red-400 transition-colors underline decoration-gray-700 underline-offset-4"
+            disabled={isLockedOut}
+            className="text-sm text-gray-500 hover:text-red-400 transition-colors underline decoration-gray-700 underline-offset-4 disabled:opacity-50"
           >
             He perdido mi contraseña / Borrar billetera
           </button>
@@ -115,4 +183,4 @@ export default function UnlockWallet() {
       )}
     </div>
   );
-}
+          }
