@@ -13,7 +13,10 @@ import Dashboard from './pages/Dashboard/Dashboard.jsx';
 import AddressBook from './pages/AddressBook/AddressBook.jsx';
 import Send from './pages/Send/Send.jsx';
 import Assets from './pages/Assets/Assets.jsx';
-import Diagnostics from './pages/Diagnostics/Diagnostics.jsx'; // <-- IMPORTADO AQUÍ
+import Diagnostics from './pages/Diagnostics/Diagnostics.jsx';
+
+// Componentes Globales
+import ApprovalModal from './components/ApprovalModal.jsx'; // <-- NUEVO IMPORT
 
 function ProtectedRoute({ children }) {
   const { isUnlocked } = useWalletStore();
@@ -31,37 +34,42 @@ function AppContent() {
   useAutoLock(5);
 
   return (
-    <Routes>
-      {/* Rutas Públicas */}
-      <Route path="/welcome" element={<Welcome />} />
-      <Route path="/create-wallet" element={<CreateWallet />} />
-      <Route path="/import-wallet" element={<ImportWallet />} />
-      
-      {/* Ruta de Desbloqueo */}
-      <Route 
-        path="/unlock" 
-        element={vaultBlob ? <UnlockWallet /> : <Navigate to="/welcome" replace />} 
-      />
+    <>
+      <Routes>
+        {/* Rutas Públicas */}
+        <Route path="/welcome" element={<Welcome />} />
+        <Route path="/create-wallet" element={<CreateWallet />} />
+        <Route path="/import-wallet" element={<ImportWallet />} />
+        
+        {/* Ruta de Desbloqueo */}
+        <Route 
+          path="/unlock" 
+          element={vaultBlob ? <UnlockWallet /> : <Navigate to="/welcome" replace />} 
+        />
 
-      {/* RUTA DE DIAGNÓSTICO TEMPORAL (Sin protección) */}
-      <Route path="/diagnostics" element={<Diagnostics />} />
+        {/* Ruta de Diagnóstico Temporal */}
+        <Route path="/diagnostics" element={<Diagnostics />} />
 
-      {/* Rutas Protegidas */}
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/address-book" element={<ProtectedRoute><AddressBook /></ProtectedRoute>} />
-      <Route path="/send" element={<ProtectedRoute><Send /></ProtectedRoute>} />
-      <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
+        {/* Rutas Protegidas */}
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/address-book" element={<ProtectedRoute><AddressBook /></ProtectedRoute>} />
+        <Route path="/send" element={<ProtectedRoute><Send /></ProtectedRoute>} />
+        <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
 
-      {/* Ruta Raíz y Catch-all */}
-      <Route 
-        path="*" 
-        element={
-          !vaultBlob 
-            ? <Navigate to="/welcome" replace /> 
-            : (!isUnlocked ? <Navigate to="/unlock" replace /> : <Navigate to="/dashboard" replace />)
-        } 
-      />
-    </Routes>
+        {/* Ruta Raíz y Catch-all */}
+        <Route 
+          path="*" 
+          element={
+            !vaultBlob 
+              ? <Navigate to="/welcome" replace /> 
+              : (!isUnlocked ? <Navigate to="/unlock" replace /> : <Navigate to="/dashboard" replace />)
+          } 
+        />
+      </Routes>
+
+      {/* MODAL GLOBAL DE APROBACIÓN (EIP-1193) */}
+      <ApprovalModal />
+    </>
   );
 }
 
