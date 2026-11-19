@@ -13,14 +13,7 @@ export default function Diagnostics() {
     
     const RPC = 'https://0x4e4542e3.rpc.aurora-cloud.dev';
     const ADDRESS = manualAddress || activeAccount?.address; 
-    const TOKENS = {
-      AURORA: '0x8bec47865ade3b172a928df8f990bc7f2a3b9f79',
-      wNEAR: '0xc42c30ac6cc15fac9bd938618bcaa1a1fae8501d',
-      USDC: '0x368ebb46aca6b8d0787c96b2b20bd3cc3f2c45f7',
-      USDT: '0x80da25da4d783e57d2fcda0436873a193a4beccf',
-      TURBO: '0x91b72833c45844d2182b7bcb49a08ec927b14dca',
-      MULTICALL3: '0xcA11bde05977b3631167028862bE2a173976CA11',
-    };
+    const WNEAR_ADDRESS = '0xc42c30ac6cc15fac9bd938618bcaa1a1fae8501d';
 
     const call = async (payload) => {
       try {
@@ -37,16 +30,19 @@ export default function Diagnostics() {
 
     if (ADDRESS) {
       newResults.push({ prueba: 'Dirección Usada', status: 'OK', resultado: ADDRESS });
+      
+      // Prueba Nativa
       const bal = await call({ jsonrpc: '2.0', id: 2, method: 'eth_getBalance', params: [ADDRESS, 'latest'] });
-      newResults.push({ prueba: 'eth_getBalance (Nativo)', status: bal.status, resultado: bal.json?.result || 'Error' });
+      newResults.push({ prueba: 'Balance Nativo (ETH)', status: bal.status, resultado: bal.json?.result || 'Error' });
+
+      // Prueba de wNEAR usando eth_call (balanceOf)
+      // data = 0x70a08231 + address sin 0x
+      const data = `0x70a08231000000000000000000000000${ADDRESS.slice(2)}`;
+      const tokenBal = await call({ jsonrpc: '2.0', id: 4, method: 'eth_call', params: [{ to: WNEAR_ADDRESS, data }, 'latest'] });
+      newResults.push({ prueba: 'wNEAR balanceOf (eth_call)', status: tokenBal.status, resultado: tokenBal.json?.result || JSON.stringify(tokenBal.json) });
     } else {
       newResults.push({ prueba: 'ALERTA', status: 'ERROR', resultado: 'No hay dirección activa ni manual.' });
     }
-
-    // Ráfaga x10 para probar estabilidad
-    const burst = await Promise.all(Array.from({ length: 10 }, (_, i) => call({ jsonrpc: '2.0', id: 100 + i, method: 'eth_blockNumber', params: [] })));
-    const counts = burst.reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {});
-    newResults.push({ prueba: 'Ráfaga x10', status: 'OK', resultado: JSON.stringify(counts) });
 
     setResults(newResults);
     setLoading(false);
@@ -57,7 +53,7 @@ export default function Diagnostics() {
       <h1 className="text-xl font-bold mb-4">Diagnóstico RPC Tuxachain</h1>
       
       <div className="mb-4">
-        <label className="text-xs text-gray-400 block mb-1">Dirección a probar (dejar vacío para usar la activa):</label>
+        <label className="text-xs text-gray-400 block mb-1">Dirección a probar:</label>
         <input 
           type="text" 
           value={manualAddress}
