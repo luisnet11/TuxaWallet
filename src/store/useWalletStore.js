@@ -12,6 +12,15 @@ import {
 import { getTuxaPublicClient, createTuxaWalletClient, ERC20_ABI } from '../services/viemClient.js';
 import { DEFAULT_TOKENS } from '../config/tokens.config.js';
 
+// Función auxiliar para formatear números sin perder precisión en saldos pequeños
+function formatBalance(valueStr) {
+  const num = parseFloat(valueStr);
+  if (num === 0) return '0.0000';
+  if (num < 0.000001) return '< 0.000001'; // Es polvo (dust)
+  if (num < 0.01) return num.toFixed(6);   // Saldos muy pequeños (ej. el wNEAR que tienes)
+  return num.toFixed(4);                   // Saldos normales
+}
+
 export const useWalletStore = create(
   persist(
     (set, get) => ({
@@ -139,7 +148,6 @@ export const useWalletStore = create(
         if (account) set({ activeAccount: account, error: null });
       },
 
-      // SALDO NATIVO CON MANEJO DE DUST Y ERRORES
       fetchActiveAccountBalance: async () => {
         const { activeAccount } = get();
         if (!activeAccount) return null; 
@@ -147,14 +155,10 @@ export const useWalletStore = create(
           const client = getTuxaPublicClient();
           const balanceWei = await client.getBalance({ address: activeAccount.address });
           const formatted = formatEther(balanceWei);
-          const num = parseFloat(formatted);
-          
-          // Si el saldo es mayor a 0 pero menor a 0.0001, mostramos el indicador
-          if (num === 0 && balanceWei > 0n) return '<0.0001';
-          return num.toFixed(4);
+          return formatBalance(formatted); // Usa el formateador inteligente
         } catch (err) {
           console.error('[TuxaWallet] Error RPC saldo nativo:', err);
-          return null; // Devuelve null para indicar error, no 0
+          return null; 
         }
       },
 
@@ -182,7 +186,6 @@ export const useWalletStore = create(
         }
       },
 
-      // SALDO ERC-20 CON MANEJO DE DUST Y ERRORES
       fetchERC20Balance: async (tokenAddress) => {
         const { activeAccount, trackedTokens } = get();
         if (!activeAccount) return null; 
@@ -198,14 +201,10 @@ export const useWalletStore = create(
             args: [activeAccount.address],
           });
           const formatted = formatUnits(balanceWei, token.decimals);
-          const num = parseFloat(formatted);
-          
-          // Si el token tiene decimales altos (ej. wNEAR 24) y es una fracción mínima
-          if (num === 0 && balanceWei > 0n) return '<0.0001';
-          return num.toFixed(4); 
+          return formatBalance(formatted); // Usa el formateador inteligente
         } catch (err) {
           console.error(`[TuxaWallet] Error RPC token ${token.symbol}:`, err);
-          return null; // Devuelve null para indicar error
+          return null; 
         }
       },
 
@@ -295,7 +294,6 @@ export const useWalletStore = create(
       storage: createJSONStorage(() => localStorage),
       version: 1, 
       migrate: (persistedState, version) => {
-        // Migración para eliminar el contrato de ETH puenteado de usuarios viejos
         if (version === 0) {
           if (persistedState.trackedTokens) {
             persistedState.trackedTokens = persistedState.trackedTokens.filter(
