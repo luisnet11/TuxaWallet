@@ -9,18 +9,26 @@ function formatMethodName(method) {
   return method.charAt(0).toUpperCase() + method.slice(1);
 }
 
-export async function fetchTransactionHistory(address) {
-  if (!address) return { data: [], error: 'Dirección no proporcionada' };
+export async function fetchTransactionHistory(address, nextParams = null) {
+  if (!address) return { data: [], nextPage: null, error: 'Dirección no proporcionada' };
 
   try {
-    const response = await fetch(`${BLOCKSCOUT_API_URL}/addresses/${address}/transactions`);
+    let url = `${BLOCKSCOUT_API_URL}/addresses/${address}/transactions`;
     
-    if (!response.ok) {
-      throw new Error(`Error en la API de Blockscout: ${response.status}`);
+    // Si hay parámetros de paginación, los añadimos a la URL
+    if (nextParams) {
+      const params = new URLSearchParams(nextParams);
+      url += `?${params.toString()}`;
     }
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Error en API: ${response.status}`);
 
     const data = await response.json();
     const rawTransactions = data.items || [];
+    
+    // Blockscout devuelve los parámetros para la siguiente página aquí
+    const nextPage = data.next_page_params || null;
 
     const processed = rawTransactions.map(tx => {
       const type = classifyTransaction(tx, address);
@@ -57,10 +65,10 @@ export async function fetchTransactionHistory(address) {
       };
     });
 
-    return { data: processed, error: null };
+    return { data: processed, nextPage, error: null };
 
   } catch (error) {
     console.error('[TuxaWallet] Error al obtener historial:', error);
-    return { data: [], error: error.message };
+    return { data: [], nextPage: null, error: error.message };
   }
 }
