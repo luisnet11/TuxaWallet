@@ -149,20 +149,6 @@ export const useWalletStore = create(
         if (account) set({ activeAccount: account, error: null });
       },
 
-      fetchActiveAccountBalance: async () => {
-        const { activeAccount } = get();
-        if (!activeAccount) return null; 
-        try {
-          const client = getTuxaPublicClient();
-          const balanceWei = await client.getBalance({ address: activeAccount.address });
-          const formatted = formatEther(balanceWei);
-          return formatBalance(formatted);
-        } catch (err) {
-          console.error('[TuxaWallet] Error RPC saldo nativo:', err);
-          return null; 
-        }
-      },
-
       addTrackedToken: async (tokenAddress) => {
         const { trackedTokens } = get();
         if (trackedTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase())) {
@@ -186,12 +172,6 @@ export const useWalletStore = create(
           throw err;
         }
       },
-
-      fetchERC20Balance: async (tokenAddress) => {
-        const { activeAccount, trackedTokens } = get();
-        if (!activeAccount) return null; 
-        const token = trackedTokens.find(t => t.address === tokenAddress);
-        if (!token) return null;
 
         try {
           const client = getTuxaPublicClient();
