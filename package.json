@@ -9,19 +9,20 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "@capacitor/core": "^8.6.0",
-    "@dicebear/collection": "^9.2.2",
-    "@dicebear/core": "^9.2.2",
-    "@scure/bip32": "^2.4.0",
-    "@scure/bip39": "^2.4.0",
-    "lucide-react": "^1.70.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0",
-    "viem": "^2.57.17",
-    "zustand": "^5.0.1"
-  },
+"dependencies": {
+  "@capacitor/core": "^8.6.0",
+  "@dicebear/collection": "^9.2.2",
+  "@dicebear/core": "^9.2.2",
+  "@scure/bip32": "^2.4.0",
+  "@scure/bip39": "^2.4.0",
+  "lucide-react": "^1.70.0",
+  "react": "^18.3.1",
+  "react-dom": "^18.3.1",
+  "react-qr-code": "^2.0.15",
+  "react-router-dom": "^6.28.0",
+  "viem": "^2.57.17",
+  "zustand": "^5.0.1"
+},
   "devDependencies": {
     "@capacitor/cli": "^8.6.0",
     "@tailwindcss/vite": "^4.3.5",
