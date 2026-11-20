@@ -14,7 +14,8 @@ import AddressBook from './pages/AddressBook/AddressBook.jsx';
 import Send from './pages/Send/Send.jsx';
 import Assets from './pages/Assets/Assets.jsx';
 import Diagnostics from './pages/Diagnostics/Diagnostics.jsx';
-import Receive from './pages/Receive/Receive.jsx'; // <-- IMPORTADO AQUÍ
+import Receive from './pages/Receive/Receive.jsx';
+import Activities from './pages/Activities/Activities.jsx'; // <-- NUEVO IMPORT
 
 // Componentes Globales
 import ApprovalModal from './components/ApprovalModal.jsx';
@@ -24,6 +25,7 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
 
   if (!isUnlocked) {
+    // Guardamos la ruta actual para volver a ella después del desbloqueo
     return <Navigate to="/unlock" state={{ from: location }} replace />;
   }
   return children;
@@ -32,6 +34,7 @@ function ProtectedRoute({ children }) {
 function AppContent() {
   const { vaultBlob, isUnlocked } = useWalletStore();
 
+  // ACTIVAMOS EL BLOQUEO POR INACTIVIDAD (5 MINUTOS)
   useAutoLock(5);
 
   return (
@@ -51,14 +54,15 @@ function AppContent() {
         {/* Ruta de Diagnóstico Temporal */}
         <Route path="/diagnostics" element={<Diagnostics />} />
 
-        {/* Rutas Protegidas (Requieren sesión) */}
+        {/* Rutas Protegidas (Requieren sesión activa) */}
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/address-book" element={<ProtectedRoute><AddressBook /></ProtectedRoute>} />
         <Route path="/send" element={<ProtectedRoute><Send /></ProtectedRoute>} />
         <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
         <Route path="/receive" element={<ProtectedRoute><Receive /></ProtectedRoute>} />
+        <Route path="/activities" element={<ProtectedRoute><Activities /></ProtectedRoute>} />
 
-        {/* Ruta Raíz y Catch-all */}
+        {/* Ruta Raíz y Catch-all: Redirección automática basada en el estado */}
         <Route 
           path="*" 
           element={
