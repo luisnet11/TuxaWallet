@@ -4,6 +4,17 @@ import { useWalletStore } from './store/useWalletStore.js';
 import { injectTuxaProvider } from './services/walletProvider.js';
 import useAutoLock from './hooks/useAutoLock.js';
 
+// ... (imports anteriores) ...
+import Send from './pages/Send/Send.jsx';
+import Assets from './pages/Assets/Assets.jsx';
+import Diagnostics from './pages/Diagnostics/Diagnostics.jsx';
+import Receive from './pages/Receive/Receive.jsx'; // <-- NUEVO IMPORT
+
+// ... (dentro de AppContent)
+      <Route path="/send" element={<ProtectedRoute><Send /></ProtectedRoute>} />
+      <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
+      <Route path="/receive" element={<ProtectedRoute><Receive /></ProtectedRoute>} /> {/* <-- NUEVA RUTA */}
+
 // Páginas
 import Welcome from './pages/Welcome/Welcome.jsx';
 import CreateWallet from './pages/CreateWallet/CreateWallet.jsx';
