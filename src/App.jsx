@@ -4,17 +4,6 @@ import { useWalletStore } from './store/useWalletStore.js';
 import { injectTuxaProvider } from './services/walletProvider.js';
 import useAutoLock from './hooks/useAutoLock.js';
 
-// ... (imports anteriores) ...
-import Send from './pages/Send/Send.jsx';
-import Assets from './pages/Assets/Assets.jsx';
-import Diagnostics from './pages/Diagnostics/Diagnostics.jsx';
-import Receive from './pages/Receive/Receive.jsx'; // <-- NUEVO IMPORT
-
-// ... (dentro de AppContent)
-      <Route path="/send" element={<ProtectedRoute><Send /></ProtectedRoute>} />
-      <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
-      <Route path="/receive" element={<ProtectedRoute><Receive /></ProtectedRoute>} /> {/* <-- NUEVA RUTA */}
-
 // Páginas
 import Welcome from './pages/Welcome/Welcome.jsx';
 import CreateWallet from './pages/CreateWallet/CreateWallet.jsx';
@@ -25,9 +14,10 @@ import AddressBook from './pages/AddressBook/AddressBook.jsx';
 import Send from './pages/Send/Send.jsx';
 import Assets from './pages/Assets/Assets.jsx';
 import Diagnostics from './pages/Diagnostics/Diagnostics.jsx';
+import Receive from './pages/Receive/Receive.jsx'; // <-- IMPORTADO AQUÍ
 
 // Componentes Globales
-import ApprovalModal from './components/ApprovalModal.jsx'; // <-- NUEVO IMPORT
+import ApprovalModal from './components/ApprovalModal.jsx';
 
 function ProtectedRoute({ children }) {
   const { isUnlocked } = useWalletStore();
@@ -61,11 +51,12 @@ function AppContent() {
         {/* Ruta de Diagnóstico Temporal */}
         <Route path="/diagnostics" element={<Diagnostics />} />
 
-        {/* Rutas Protegidas */}
+        {/* Rutas Protegidas (Requieren sesión) */}
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/address-book" element={<ProtectedRoute><AddressBook /></ProtectedRoute>} />
         <Route path="/send" element={<ProtectedRoute><Send /></ProtectedRoute>} />
         <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
+        <Route path="/receive" element={<ProtectedRoute><Receive /></ProtectedRoute>} />
 
         {/* Ruta Raíz y Catch-all */}
         <Route 
