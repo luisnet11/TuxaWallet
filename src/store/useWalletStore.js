@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { parseEther, parseUnits, formatUnits, formatEther, isAddress, encodeFunctionData } from 'viem';
+import { parseEther, parseUnits, isAddress, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
   createNewWallet,
@@ -11,16 +11,6 @@ import {
 } from '../vault/walletVault.js';
 import { getTuxaPublicClient, createTuxaWalletClient, ERC20_ABI } from '../services/viemClient.js';
 import { DEFAULT_TOKENS } from '../config/tokens.config.js';
-
-// Función auxiliar para formatear números sin perder precisión en saldos pequeños
-function formatBalance(valueStr) {
-  if (valueStr === null || valueStr === undefined) return null;
-  const num = parseFloat(valueStr);
-  if (num === 0) return '0.0000';
-  if (num < 0.000001) return '< 0.000001'; // Es polvo (dust)
-  if (num < 0.01) return num.toFixed(6);   // Saldos muy pequeños
-  return num.toFixed(4);                   // Saldos normales
-}
 
 export const useWalletStore = create(
   persist(
@@ -164,28 +154,12 @@ export const useWalletStore = create(
             client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'decimals' }),
           ]);
 
-          const newToken = { address: tokenAddress, name, symbol, decimals };
+          const newToken = { address: tokenAddress, name, symbol, decimals, verified: false };
           set({ trackedTokens: [...trackedTokens, newToken], isLoading: false });
           return newToken;
         } catch (err) {
           set({ isLoading: false, error: 'Dirección de token inválida o no compatible con ERC-20.' });
           throw err;
-        }
-      },
-
-        try {
-          const client = getTuxaPublicClient();
-          const balanceWei = await client.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'balanceOf',
-            args: [activeAccount.address],
-          });
-          const formatted = formatUnits(balanceWei, token.decimals);
-          return formatBalance(formatted);
-        } catch (err) {
-          console.error(`[TuxaWallet] Error RPC token ${token.symbol}:`, err);
-          return null; 
         }
       },
 
@@ -229,7 +203,6 @@ export const useWalletStore = create(
         }
       },
 
-      // CORRECCIÓN: sendERC20Token con encodeFunctionData
       sendERC20Token: async (tokenAddress, toAddress, amount, dryRun = false) => {
         const { isUnlocked, mnemonicSession, activeAccount, trackedTokens } = get();
         if (!isUnlocked || !mnemonicSession) throw new Error('Billetera bloqueada.');
@@ -250,14 +223,12 @@ export const useWalletStore = create(
 
           const parsedAmount = parseUnits(amount, token.decimals);
           
-          // 1. Codificamos la llamada al contrato (transfer)
           const data = encodeFunctionData({
             abi: ERC20_ABI,
             functionName: 'transfer',
             args: [toAddress, parsedAmount]
           });
 
-          // 2. Preparamos la transacción (esto calcula el gas, nonce, etc. para eth_call)
           const preparedTx = await publicClient.prepareTransactionRequest({
             to: tokenAddress,
             data,
@@ -266,12 +237,10 @@ export const useWalletStore = create(
           });
 
           if (dryRun) {
-            // 3. Firmamos la transacción preparada
             const signedTx = await walletClient.signTransaction(preparedTx);
             set({ isLoading: false });
             return { success: true, hash: signedTx, message: `✅ Firma ERC-20 (${token.symbol}) exitosa (Dry Run).` };
           } else {
-            // 3. Enviamos la transacción preparada
             const hash = await walletClient.sendTransaction(preparedTx);
             set({ isLoading: false });
             return { success: true, hash, message: `✅ Transferencia de ${token.symbol} enviada.` };
