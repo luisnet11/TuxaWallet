@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Search, SlidersHorizontal, Plus, Coins, UserPlus, RefreshCw } from 'lucide-react';
 import { isAddress } from 'viem';
@@ -8,7 +8,6 @@ import { useDelayedFlag } from '../../hooks/useDelayedFlag.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
 import { formatTokenAmount, formatUsd, toUsdNumber } from '../../utils/formatBalance.js';
 
-// Usamos la misma lógica de token legado que en el Dashboard
 const LEGACY_ETH_ERC20 = '0x5a524251df27a25ac6b9964a93e1c23ad692688d';
 
 export default function Assets() {
@@ -19,31 +18,30 @@ export default function Assets() {
   
   const { trackedTokens, fiatCurrency } = useWalletStore();
 
-  // Conectamos al nuevo motor de saldos
-  const { entry, isInitialLoading, refetch } = useBalances();
+  // Extraemos isRefreshing y refetch del hook de saldos
+  const { entry, isInitialLoading, isRefreshing, refetch } = useBalances();
   const showSkeleton = useDelayedFlag(isInitialLoading, 200);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [hideZero, setHideZero] = useState(false);
   const [prices, setPrices] = useState({});
 
-  // Filtramos el contrato viejo de ETH
   const cleanTrackedTokens = useMemo(() => {
     return trackedTokens.filter(t => t.address.toLowerCase() !== LEGACY_ETH_ERC20);
   }, [trackedTokens]);
 
-  // Precios dinámicos
-  const tokenKey = cleanTrackedTokens.map(t => t.address.toLowerCase()).join(',');
-  useState(() => {
+  // Cargar precios cuando cambian los tokens o el Fiat
+  useEffect(() => {
+    let cancelled = false;
     const loadPrices = async () => {
       const tokenAddrs = ['native', ...cleanTrackedTokens.map(t => t.address)];
       const fetchedPrices = await fetchTokenPrices(tokenAddrs, fiatCurrency);
-      setPrices(fetchedPrices);
+      if (!cancelled) setPrices(fetchedPrices);
     };
     loadPrices();
-  }, [tokenKey, fiatCurrency]);
+    return () => { cancelled = true; };
+  }, [cleanTrackedTokens, fiatCurrency]);
 
-  // Lista unificada
   const allTokens = useMemo(() => {
     return [
       { address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 },
@@ -51,7 +49,6 @@ export default function Assets() {
     ];
   }, [cleanTrackedTokens]);
 
-  // Filtrado por búsqueda y saldo cero
   const filteredTokens = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return allTokens.filter(t => {
@@ -116,9 +113,16 @@ export default function Assets() {
 
       <main className="flex-1 px-4 overflow-y-auto pb-10">
         
-        <div className="flex justify-between items-center mb-4 mt-2">
-          <p className="text-xs text-gray-400">Desliza para actualizar los saldos</p>
-          <button onClick={refetch} className="text-gray-400 hover:text-white"><RefreshCw size={14} /></button>
+        {/* BOTÓN DE ACTUALIZAR CON ANIMACIÓN */}
+        <div className="flex justify-end items-center mb-2 mt-2">
+          <button 
+            onClick={refetch} 
+            disabled={isRefreshing}
+            className="flex items-center space-x-1 text-xs text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50 bg-purple-600/10 px-3 py-1.5 rounded-full"
+          >
+            <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+            <span>{isRefreshing ? 'Actualizando...' : 'Actualizar saldos'}</span>
+          </button>
         </div>
 
         <div className="space-y-3">
@@ -135,7 +139,6 @@ export default function Assets() {
             </div>
           ) : (
             filteredTokens.map((token) => {
-              // Extraer el saldo real del motor de Claude
               const item = token.address === 'native' 
                 ? entry?.native 
                 : entry?.tokens?.[token.address.toLowerCase()];
@@ -177,4 +180,4 @@ export default function Assets() {
       </main>
     </div>
   );
-          }
+}
