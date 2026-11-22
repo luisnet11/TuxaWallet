@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { Lock, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Zap, Home, Activity, Settings, Coins, Copy, Check, ChevronDown, Plus, WifiOff, RefreshCw } from 'lucide-react';
+import { 
+  Lock, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, 
+  Zap, Home, Activity, Settings, Coins, Copy, Check, 
+  ChevronDown, Plus, WifiOff, RefreshCw 
+} from 'lucide-react';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { useBalances } from '../../hooks/useBalances.js';
 import { useDelayedFlag } from '../../hooks/useDelayedFlag.js';
@@ -12,6 +16,8 @@ import { TUXACHAIN_EXPLORER_URL } from '../../services/tuxachain.config.js';
 import { formatTokenAmount, formatUsd, toUsdNumber } from '../../utils/formatBalance.js';
 import TransactionIcon from '../../components/TransactionIcon.jsx';
 import AccountAvatar from '../../components/AccountAvatar.jsx';
+
+const LEGACY_ETH_ERC20 = '0x5a524251df27a25ac6b9964a93e1c23ad692688d';
 
 const AssetRow = memo(function AssetRow({ symbol, subtitle, decimals, value, status, stale, price, isNative }) {
   const amount = formatTokenAmount(value, decimals);
@@ -42,10 +48,14 @@ const AssetRow = memo(function AssetRow({ symbol, subtitle, decimals, value, sta
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  const { activeAccount, vaultBlob, lockWallet, trackedTokens, setActiveAccount, addNewAccount, isUnlocked } = useWalletStore(
+  const { 
+    activeAccount, vaultBlob, lockWallet, trackedTokens, 
+    setActiveAccount, addNewAccount, isUnlocked, fiatCurrency 
+  } = useWalletStore(
     useShallow((s) => ({
       activeAccount: s.activeAccount, vaultBlob: s.vaultBlob, lockWallet: s.lockWallet,
-      trackedTokens: s.trackedTokens, setActiveAccount: s.setActiveAccount, addNewAccount: s.addNewAccount, isUnlocked: s.isUnlocked,
+      trackedTokens: s.trackedTokens, setActiveAccount: s.setActiveAccount, 
+      addNewAccount: s.addNewAccount, isUnlocked: s.isUnlocked, fiatCurrency: s.fiatCurrency
     }))
   );
 
@@ -60,7 +70,7 @@ export default function Dashboard() {
   const [copied, setCopied] = useState(false);
   const menuRef = useRef(null);
 
-  const tokens = useMemo(() => trackedTokens.filter(t => t.address.toLowerCase() !== '0x5a524251df27a25ac6b9964a93e1c23ad692688d'), [trackedTokens]);
+  const tokens = useMemo(() => trackedTokens.filter(t => t.address.toLowerCase() !== LEGACY_ETH_ERC20), [trackedTokens]);
   const tokenKey = tokens.map(t => t.address.toLowerCase()).join(',');
 
   useEffect(() => {
@@ -71,13 +81,14 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Precios dinámicos según Fiat seleccionado
   useEffect(() => {
     let cancelled = false;
-    fetchTokenPrices(['native', ...tokens.map((t) => t.address)], 'usd')
+    fetchTokenPrices(['native', ...tokens.map((t) => t.address)], fiatCurrency)
       .then((p) => { if (!cancelled) setPrices(p); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [tokenKey]);
+  }, [tokenKey, fiatCurrency]);
 
   useEffect(() => {
     const address = activeAccount?.address;
@@ -175,7 +186,7 @@ export default function Dashboard() {
                 {vaultBlob?.accounts.map((acc) => (
                   <button key={acc.index} onClick={() => { setActiveAccount(acc.index); setShowAccountMenu(false); }} className={`w-full text-left flex items-center space-x-3 p-2 rounded-lg transition-colors ${activeAccount?.index === acc.index ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-white/5'}`}>
                     <AccountAvatar address={acc.address} size={28} />
-                    <div className="flex-1 min-w-0"><p className="text-sm font-medium">Cuenta {acc.index}</p><p className="text-xs text-gray-400 truncate">{acc.address}</p></div>
+                    <div className="flex-1 min-w-0"><p className="text-sm font-medium">{acc.name || `Cuenta ${acc.index}`}</p><p className="text-xs text-gray-400 truncate">{acc.address}</p></div>
                   </button>
                 ))}
               </div>
@@ -256,4 +267,4 @@ export default function Dashboard() {
       </nav>
     </div>
   );
-                      }
+    }
