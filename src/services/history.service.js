@@ -13,8 +13,8 @@ export async function fetchTransactionHistory(address, nextParams = null) {
   if (!address) return { data: [], nextPage: null, error: 'Dirección no proporcionada' };
 
   try {
-    // Añadimos un timestamp a la URL para romper la caché del navegador
-    const cacheBuster = `t=${Date.now()}`;
+    // Usamos concatenación simple para evitar fallos de comillas
+    const cacheBuster = 't=' + Date.now();
     let url = `${BLOCKSCOUT_API_URL}/addresses/${address}/transactions?${cacheBuster}`;
     
     if (nextParams) {
@@ -22,8 +22,8 @@ export async function fetchTransactionHistory(address, nextParams = null) {
       url += `&${params.toString()}`;
     }
 
-    // Forzamos al navegador a NO guardar la respuesta en caché (no-store)
-    const response = await fetch(url, { cache: 'no-store' });
+    // Petición estándar
+    const response = await fetch(url);
     if (!response.ok) throw new Error(`Error en API: ${response.status}`);
 
     const data = await response.json();
