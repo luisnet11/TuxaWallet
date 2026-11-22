@@ -1,10 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, Search, SlidersHorizontal, Plus, Coins, UserPlus } from 'lucide-react';
+import { ChevronLeft, Search, SlidersHorizontal, Plus, Coins, UserPlus, RefreshCw } from 'lucide-react';
 import { isAddress } from 'viem';
 import { useWalletStore } from '../../store/useWalletStore.js';
+import { useBalances } from '../../hooks/useBalances.js';
+import { useDelayedFlag } from '../../hooks/useDelayedFlag.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
-import { formatTokenAmount, formatUsd, toUsdNumber } from '../../utils/formatBalance.js'; // Usamos las utilidades
+import { formatTokenAmount, formatUsd, toUsdNumber } from '../../utils/formatBalance.js';
+
+// Usamos la misma lógica de token legado que en el Dashboard
+const LEGACY_ETH_ERC20 = '0x5a524251df27a25ac6b9964a93e1c23ad692688d';
 
 export default function Assets() {
   const navigate = useNavigate();
@@ -14,40 +19,31 @@ export default function Assets() {
   
   const { trackedTokens, fiatCurrency } = useWalletStore();
 
+  // Conectamos al nuevo motor de saldos
+  const { entry, isInitialLoading, refetch } = useBalances();
+  const showSkeleton = useDelayedFlag(isInitialLoading, 200);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [hideZero, setHideZero] = useState(false);
-  const [balances, setBalances] = useState({});
   const [prices, setPrices] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
 
-  // FILTRO DE SEGURIDAD
+  // Filtramos el contrato viejo de ETH
   const cleanTrackedTokens = useMemo(() => {
-    return trackedTokens.filter(t => t.address.toLowerCase() !== '0x5a524251df27a25ac6b9964a93e1c23ad692688d');
+    return trackedTokens.filter(t => t.address.toLowerCase() !== LEGACY_ETH_ERC20);
   }, [trackedTokens]);
 
-  useEffect(() => {
-    const loadAssets = async () => {
-      setIsLoading(true);
-      try {
-        // Ya no llamamos a fetchActiveAccountBalance ni fetchERC20Balance del store principal
-        // Podríamos usar el useBalanceStore, pero para simplificar esta vista, haremos fetch directo temporal
-        // Nota: En una refactorización futura, Assets también usará useBalances.
-        
-        // Como el store principal ya no tiene las funciones, solo mostraremos los precios por ahora
-        // (El balance real se maneja en el Dashboard con useBalances)
-        
-        const tokenAddrs = ['native', ...cleanTrackedTokens.map(t => t.address)];
-        const fetchedPrices = await fetchTokenPrices(tokenAddrs, fiatCurrency);
-        setPrices(fetchedPrices);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setIsLoading(false);
-      }
+  // Precios dinámicos
+  const tokenKey = cleanTrackedTokens.map(t => t.address.toLowerCase()).join(',');
+  useState(() => {
+    const loadPrices = async () => {
+      const tokenAddrs = ['native', ...cleanTrackedTokens.map(t => t.address)];
+      const fetchedPrices = await fetchTokenPrices(tokenAddrs, fiatCurrency);
+      setPrices(fetchedPrices);
     };
-    loadAssets();
-  }, [cleanTrackedTokens, fiatCurrency]);
+    loadPrices();
+  }, [tokenKey, fiatCurrency]);
 
+  // Lista unificada
   const allTokens = useMemo(() => {
     return [
       { address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 },
@@ -55,15 +51,24 @@ export default function Assets() {
     ];
   }, [cleanTrackedTokens]);
 
+  // Filtrado por búsqueda y saldo cero
   const filteredTokens = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return allTokens.filter(t => {
       const matchesSearch = t.symbol.toLowerCase().includes(term) || 
                             t.name.toLowerCase().includes(term) || 
                             t.address.toLowerCase().includes(term);
-      return matchesSearch;
+      
+      if (!matchesSearch) return false;
+
+      if (hideZero && entry) {
+        const item = t.address === 'native' ? entry.native : entry.tokens[t.address.toLowerCase()];
+        if (!item || item.value === 0n || item.value === null) return false;
+      }
+
+      return true;
     });
-  }, [allTokens, searchTerm]);
+  }, [allTokens, searchTerm, hideZero, entry]);
 
   const handleTokenClick = (token) => {
     if (returnTo === 'send') {
@@ -99,6 +104,7 @@ export default function Assets() {
         <button 
           onClick={() => setHideZero(!hideZero)}
           className={`p-2 rounded-lg transition-colors ${hideZero ? 'bg-purple-600/20 text-purple-400' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
+          title="Ocultar saldo cero"
         >
           <SlidersHorizontal size={20} />
         </button>
@@ -109,8 +115,14 @@ export default function Assets() {
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto pb-10">
-        <div className="space-y-3 mt-4">
-          {isLoading ? (
+        
+        <div className="flex justify-between items-center mb-4 mt-2">
+          <p className="text-xs text-gray-400">Desliza para actualizar los saldos</p>
+          <button onClick={refetch} className="text-gray-400 hover:text-white"><RefreshCw size={14} /></button>
+        </div>
+
+        <div className="space-y-3">
+          {showSkeleton ? (
             [1, 2, 3, 4, 5].map(i => <div key={i} className="h-16 bg-gray-900 animate-pulse rounded-2xl"></div>)
           ) : filteredTokens.length === 0 ? (
             <div className="text-center py-10">
@@ -123,7 +135,19 @@ export default function Assets() {
             </div>
           ) : (
             filteredTokens.map((token) => {
+              // Extraer el saldo real del motor de Claude
+              const item = token.address === 'native' 
+                ? entry?.native 
+                : entry?.tokens?.[token.address.toLowerCase()];
+              
+              const value = item?.value ?? null;
+              const status = item?.status;
               const price = prices[token.symbol] || 0;
+              const noContract = status === 'no-contract';
+
+              const amountFormatted = formatTokenAmount(value, token.decimals);
+              const usd = value === null || price === null ? null : toUsdNumber(value, token.decimals, price);
+
               return (
                 <button 
                   key={token.address}
@@ -132,18 +156,18 @@ export default function Assets() {
                 >
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">
-                      <Coins size={20} className="text-purple-400" />
+                      <Coins size={20} className={token.address === 'native' ? 'text-purple-400' : 'text-gray-400'} />
                     </div>
                     <div className="text-left">
                       <p className="font-bold text-sm">{token.symbol}</p>
-                      <p className="text-xs text-gray-400 font-mono">
-                        {token.address === 'native' ? 'Token Nativo' : `${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                      <p className={`text-xs ${noContract ? 'text-yellow-400' : 'text-gray-400'} font-mono`}>
+                        {noContract ? 'No existe' : (token.address === 'native' ? 'Token Nativo' : `${token.address.slice(0, 6)}...${token.address.slice(-4)}`)}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-sm">--</p>
-                    <p className="text-xs text-gray-400">{formatUsd(price)}</p>
+                  <div className={`text-right ${item?.stale ? 'opacity-60' : ''}`}>
+                    <p className="font-bold text-sm">{noContract ? '--' : amountFormatted}</p>
+                    <p className="text-xs text-gray-400">{usd === null ? '--' : formatUsd(usd)}</p>
                   </div>
                 </button>
               );
@@ -153,4 +177,4 @@ export default function Assets() {
       </main>
     </div>
   );
-}
+          }
