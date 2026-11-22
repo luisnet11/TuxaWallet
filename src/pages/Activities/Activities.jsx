@@ -6,7 +6,6 @@ import { fetchTransactionHistory } from '../../services/history.service.js';
 import { TUXACHAIN_EXPLORER_URL } from '../../services/tuxachain.config.js';
 import TransactionIcon from '../../components/TransactionIcon.jsx';
 
-// Función para formatear la fecha en secciones (Hoy, Ayer, Fecha)
 function getDateGroup(isoString) {
   const date = new Date(isoString);
   const today = new Date();
@@ -26,43 +25,54 @@ export default function Activities() {
   const [transactions, setTransactions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [nextPage, setNextPage] = useState(null);
-  const [filterType, setFilterType] = useState('all'); // all, sent, received
+  const [filterType, setFilterType] = useState('all');
   const [showFilterModal, setShowFilterModal] = useState(false);
 
-  // Carga inicial
-  useEffect(() => {
-    const loadInitial = async () => {
-      if (!activeAccount?.address) return;
-      setIsLoading(true);
+  const loadInitial = async (isRefresh = false) => {
+    if (!activeAccount?.address) return;
+    if (isRefresh) setIsRefreshing(true);
+    else setIsLoading(true);
+
+    try {
       const result = await fetchTransactionHistory(activeAccount.address);
-      setTransactions(result.data);
+      setTransactions(result.data || []);
       setNextPage(result.nextPage);
+    } catch (e) {
+      console.error(e);
+      setTransactions([]);
+    } finally {
       setIsLoading(false);
-    };
-    loadInitial();
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadInitial(false);
   }, [activeAccount?.address]);
 
-  // Cargar más (Paginación)
   const handleLoadMore = async () => {
     if (!nextPage || isLoadingMore) return;
     setIsLoadingMore(true);
-    const result = await fetchTransactionHistory(activeAccount.address, nextPage);
-    setTransactions(prev => [...prev, ...result.data]);
-    setNextPage(result.nextPage);
-    setIsLoadingMore(false);
+    try {
+      const result = await fetchTransactionHistory(activeAccount.address, nextPage);
+      setTransactions(prev => [...prev, ...(result.data || [])]);
+      setNextPage(result.nextPage);
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setIsLoadingMore(false);
+    }
   };
 
-  // Filtrado y Agrupación por fecha
   const groupedTransactions = useMemo(() => {
-    // 1. Filtrar
     const filtered = transactions.filter(tx => {
       if (filterType === 'sent') return tx.isSender;
       if (filterType === 'received') return !tx.isSender;
       return true;
     });
 
-    // 2. Agrupar
     const groups = {};
     filtered.forEach(tx => {
       const group = getDateGroup(tx.timestamp);
@@ -80,15 +90,24 @@ export default function Activities() {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-10">
       
-      {/* HEADER */}
       <header className="p-4 flex items-center justify-between bg-gray-950 z-20 sticky top-0 border-b border-white/5">
         <button onClick={() => navigate('/dashboard')} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
           <ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">Actividades</h1>
-        <button onClick={() => setShowFilterModal(true)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
-          <SlidersHorizontal size={20} className={filterType !== 'all' ? 'text-purple-400' : ''} />
-        </button>
+        
+        <div className="flex items-center space-x-2">
+          <button 
+            onClick={() => loadInitial(true)} 
+            disabled={isRefreshing}
+            className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={20} className={isRefreshing ? 'animate-spin text-purple-400' : ''} />
+          </button>
+          <button onClick={() => setShowFilterModal(true)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
+            <SlidersHorizontal size={20} className={filterType !== 'all' ? 'text-purple-400' : ''} />
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto mt-4">
@@ -141,7 +160,6 @@ export default function Activities() {
               </div>
             ))}
             
-            {/* BOTÓN CARGAR MÁS */}
             {nextPage && (
               <div className="pt-4 pb-8 flex justify-center">
                 <button 
@@ -158,7 +176,6 @@ export default function Activities() {
         )}
       </main>
 
-      {/* MODAL DE FILTRO (Bottom Sheet) */}
       {showFilterModal && (
         <div className="fixed inset-0 bg-black/80 flex flex-col justify-end z-50">
           <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl p-6">
@@ -187,4 +204,4 @@ export default function Activities() {
       )}
     </div>
   );
-  }
+}
