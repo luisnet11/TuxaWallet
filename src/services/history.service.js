@@ -9,66 +9,112 @@ function formatMethodName(method) {
   return method.charAt(0).toUpperCase() + method.slice(1);
 }
 
+function formatTokenAmount(rawValue, decimals = 18) {
+  if (!rawValue) return '0';
+  try {
+    const dec = Number.isFinite(Number(decimals)) ? Number(decimals) : 18;
+    const bigVal = BigInt(rawValue);
+    const divisor = BigInt(10) ** BigInt(dec);
+    const whole = bigVal / divisor;
+    const remainder = bigVal % divisor;
+    const fracStr = remainder.toString().padStart(dec, '0').slice(0, 4);
+    return `${whole.toString()}.${fracStr}`;
+  } catch {
+    return '0';
+  }
+}
+
 export async function fetchTransactionHistory(address, nextParams = null) {
-  if (!address) return { data: [], nextPage: null, error: 'Dirección no proporcionada' };
+  if (!address) {
+    return { data: [], nextPage: null, error: 'Dirección no proporcionada' };
+  }
 
   try {
-    // Usamos concatenación simple para evitar fallos de comillas
-    const cacheBuster = 't=' + Date.now();
-    let url = `${BLOCKSCOUT_API_URL}/addresses/${address}/transactions?${cacheBuster}`;
-    
-    if (nextParams) {
-      const params = new URLSearchParams(nextParams);
-      url += `&${params.toString()}`;
+    const cleanAddress = address.trim();
+    const urlObj = new URL(`${BLOCKSCOUT_API_URL}/addresses/${cleanAddress}/transactions`);
+    urlObj.searchParams.set('t', String(Date.now()));
+
+    if (nextParams && typeof nextParams === 'object') {
+      Object.entries(nextParams).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+          urlObj.searchParams.set(key, String(value));
+        }
+      });
     }
 
-    // Petición estándar
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Error en API: ${response.status}`);
+    const response = await fetch(urlObj.toString(), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error en API del explorador (${response.status})`);
+    }
 
     const data = await response.json();
-    const rawTransactions = data.items || [];
-    const nextPage = data.next_page_params || null;
+    const rawTransactions = Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.result)
+        ? data.result
+        : [];
 
-    const processed = rawTransactions.map(tx => {
-      const type = classifyTransaction(tx, address);
-      const isSender = tx.from?.hash?.toLowerCase() === address.toLowerCase();
+    const nextPage = data?.next_page_params || null;
+    const lowerAddr = cleanAddress.toLowerCase();
+
+    const processed = rawTransactions.map((tx) => {
+      const type = classifyTransaction(tx, cleanAddress);
+      const fromHash = tx.from?.hash || (typeof tx.from === 'string' ? tx.from : '');
+      const toHash = tx.to?.hash || (typeof tx.to === 'string' ? tx.to : '');
+      const isSender = fromHash.toLowerCase() === lowerAddr;
 
       let amount = '0';
       let symbol = 'ETH';
 
       if (type === 'token_send' || type === 'token_receive') {
-        const transfer = tx.token_transfers?.find(t => 
-          t.from?.hash?.toLowerCase() === address.toLowerCase() || 
-          t.to?.hash?.toLowerCase() === address.toLowerCase()
-        );
+        const transfer = Array.isArray(tx.token_transfers)
+          ? tx.token_transfers.find(
+              (t) =>
+                t.from?.hash?.toLowerCase() === lowerAddr ||
+                t.to?.hash?.toLowerCase() === lowerAddr
+            ) || tx.token_transfers[0]
+          : null;
+
         if (transfer) {
-          amount = transfer.total?.value ? (Number(transfer.total.value) / Math.pow(10, transfer.total.decimals)).toFixed(4) : '0';
+          const rawAmount = transfer.total?.value ?? transfer.value ?? '0';
+          const decimals = transfer.token?.decimals ?? transfer.total?.decimals ?? 18;
+          amount = formatTokenAmount(rawAmount, decimals);
           symbol = transfer.token?.symbol || 'TOKEN';
         }
       } else if (tx.value) {
-        amount = formatEther(BigInt(tx.value));
-        amount = Number(amount).toFixed(4);
+        try {
+          const ethFormatted = formatEther(BigInt(tx.value));
+          amount = Number(ethFormatted).toFixed(4);
+        } catch {
+          amount = '0';
+        }
       }
 
       return {
         hash: tx.hash,
         timestamp: tx.timestamp,
         type,
-        status: tx.status,
-        from: tx.from?.hash || '',
-        to: tx.to?.hash || '',
+        status: tx.status || 'ok',
+        from: fromHash,
+        to: toHash,
         amount,
         symbol,
         method: formatMethodName(tx.method),
-        isSender
+        isSender,
       };
     });
 
     return { data: processed, nextPage, error: null };
-
   } catch (error) {
     console.error('[TuxaWallet] Error al obtener historial:', error);
-    return { data: [], nextPage: null, error: error.message };
+    return {
+      data: [],
+      nextPage: null,
+      error: error?.message || 'No se pudo consultar el historial',
+    };
   }
 }
