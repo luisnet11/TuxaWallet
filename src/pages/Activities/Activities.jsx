@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, SlidersHorizontal, X, ExternalLink, RefreshCw } from 'lucide-react';
+import { ChevronLeft, SlidersHorizontal, X, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { fetchTransactionHistory } from '../../services/history.service.js';
 import { TUXACHAIN_EXPLORER_URL } from '../../services/tuxachain.config.js';
@@ -29,18 +29,23 @@ export default function Activities() {
   const [nextPage, setNextPage] = useState(null);
   const [filterType, setFilterType] = useState('all');
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null); // NUEVO ESTADO
 
   const loadInitial = async (isRefresh = false) => {
     if (!activeAccount?.address) return;
     if (isRefresh) setIsRefreshing(true);
     else setIsLoading(true);
+    setErrorMsg(null);
 
     try {
       const result = await fetchTransactionHistory(activeAccount.address);
+      if (result.error) {
+        setErrorMsg(result.error);
+      }
       setTransactions(result.data || []);
       setNextPage(result.nextPage);
     } catch (e) {
-      console.error(e);
+      setErrorMsg('Error inesperado al conectar con el explorador.');
       setTransactions([]);
     } finally {
       setIsLoading(false);
@@ -57,10 +62,11 @@ export default function Activities() {
     setIsLoadingMore(true);
     try {
       const result = await fetchTransactionHistory(activeAccount.address, nextPage);
+      if (result.error) setErrorMsg(result.error);
       setTransactions(prev => [...prev, ...(result.data || [])]);
       setNextPage(result.nextPage);
     } catch(e) {
-      console.error(e);
+      setErrorMsg('Error al cargar más transacciones.');
     } finally {
       setIsLoadingMore(false);
     }
@@ -111,6 +117,17 @@ export default function Activities() {
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto mt-4">
+        {/* MENSAJE DE ERROR */}
+        {errorMsg && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs flex items-center gap-2 mb-4">
+            <AlertCircle size={16} className="shrink-0" /> 
+            <div>
+              <p className="font-bold">No se pudo cargar el historial</p>
+              <p>{errorMsg}</p>
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="space-y-4">
              {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-16 bg-gray-900 animate-pulse rounded-2xl"></div>)}
@@ -204,4 +221,4 @@ export default function Activities() {
       )}
     </div>
   );
-}
+                  }
