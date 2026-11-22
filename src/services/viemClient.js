@@ -1,22 +1,19 @@
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { tuxachain, TUXACHAIN_RPC_URL } from './tuxachain.config.js';
 
-// ABI mínimo del estándar ERC-20
 export const ERC20_ABI = [
   { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
   { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
   { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint8' }] },
   { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
-  { name: 'transfer', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }
+  { name: 'transfer', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] },
+  // NUEVO: Función para leer el suministro total
+  { name: 'totalSupply', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] }
 ];
 
 const _publicClient = createPublicClient({
   chain: tuxachain,
-  transport: http(TUXACHAIN_RPC_URL, { 
-    retryCount: 2, 
-    timeout: 20_000,
-    batch: true, // <-- ACTIVADO POR DIAGNÓSTICO
-  }),
+  transport: http(TUXACHAIN_RPC_URL, { retryCount: 2, timeout: 20_000 }),
 });
 
 export function getTuxaPublicClient() {
@@ -27,11 +24,7 @@ export function createTuxaWalletClient(account) {
   if (!account) throw new Error('[TuxaWallet] Se requiere una cuenta para firmar.');
   return createWalletClient({
     chain: tuxachain,
-    transport: http(TUXACHAIN_RPC_URL, { 
-      retryCount: 1, 
-      timeout: 30_000,
-      batch: true, // <-- ACTIVADO POR DIAGNÓSTICO
-    }),
+    transport: http(TUXACHAIN_RPC_URL, { retryCount: 1, timeout: 30_000 }),
     account,
   });
 }
