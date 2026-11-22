@@ -13,21 +13,21 @@ export async function fetchTransactionHistory(address, nextParams = null) {
   if (!address) return { data: [], nextPage: null, error: 'Dirección no proporcionada' };
 
   try {
-    let url = `${BLOCKSCOUT_API_URL}/addresses/${address}/transactions`;
+    // Añadimos un timestamp a la URL para romper la caché del navegador
+    const cacheBuster = `t=${Date.now()}`;
+    let url = `${BLOCKSCOUT_API_URL}/addresses/${address}/transactions?${cacheBuster}`;
     
-    // Si hay parámetros de paginación, los añadimos a la URL
     if (nextParams) {
       const params = new URLSearchParams(nextParams);
-      url += `?${params.toString()}`;
+      url += `&${params.toString()}`;
     }
 
-    const response = await fetch(url);
+    // Forzamos al navegador a NO guardar la respuesta en caché (no-store)
+    const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Error en API: ${response.status}`);
 
     const data = await response.json();
     const rawTransactions = data.items || [];
-    
-    // Blockscout devuelve los parámetros para la siguiente página aquí
     const nextPage = data.next_page_params || null;
 
     const processed = rawTransactions.map(tx => {
