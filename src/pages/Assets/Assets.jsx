@@ -115,11 +115,9 @@ export default function Assets() {
         </div>
 
         {/* BOTONES ACCIÓN */}
-        <button 
-          onClick={() => setHideZero(!hideZero)}
-          className={`p-2 rounded-lg transition-colors ${hideZero ? 'bg-purple-600/20 text-purple-400' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
-          title="Ocultar saldo cero"
-        >
+<button onClick={() => navigate('/import-token')} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white">
+  <Plus size={20} />
+</button>
           <SlidersHorizontal size={20} />
         </button>
         <button onClick={() => navigate('/import-token')} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white">
