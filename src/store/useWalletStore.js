@@ -28,11 +28,7 @@ export const useWalletStore = create(
         set({ isLoading: true, error: null });
         try {
           const { vaultBlob, mnemonic } = await createNewWallet(password, 24);
-          set({
-            pendingWallet: vaultBlob,
-            mnemonicSession: mnemonic,
-            isLoading: false,
-          });
+          set({ pendingWallet: vaultBlob, mnemonicSession: mnemonic, isLoading: false });
           return mnemonic;
         } catch (err) {
           set({ isLoading: false, error: err.message });
@@ -92,12 +88,7 @@ export const useWalletStore = create(
       },
 
       lockWallet: () => {
-        set({
-          isUnlocked: false,
-          mnemonicSession: null,
-          activeAccount: null,
-          error: null,
-        });
+        set({ isUnlocked: false, mnemonicSession: null, activeAccount: null, error: null });
       },
 
       resetWallet: () => {
@@ -139,33 +130,15 @@ export const useWalletStore = create(
         if (account) set({ activeAccount: account, error: null });
       },
 
-addTrackedToken: (tokenData) => {
-  const { trackedTokens } = get();
-  if (trackedTokens.find(t => t.address.toLowerCase() === tokenData.address.toLowerCase())) {
-    throw new Error('El token ya está en tu lista.');
-  }
-  
-  const newToken = { ...tokenData, verified: false };
-  set({ trackedTokens: [...trackedTokens, newToken] });
-  return newToken;
-},
-
-        set({ isLoading: true, error: null });
-        try {
-          const client = getTuxaPublicClient();
-          const [name, symbol, decimals] = await Promise.all([
-            client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'name' }),
-            client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'symbol' }),
-            client.readContract({ address: tokenAddress, abi: ERC20_ABI, functionName: 'decimals' }),
-          ]);
-
-          const newToken = { address: tokenAddress, name, symbol, decimals, verified: false };
-          set({ trackedTokens: [...trackedTokens, newToken], isLoading: false });
-          return newToken;
-        } catch (err) {
-          set({ isLoading: false, error: 'Dirección de token inválida o no compatible con ERC-20.' });
-          throw err;
+      // FUNCIÓN ACTUALIZADA: Recibe el objeto completo
+      addTrackedToken: (tokenData) => {
+        const { trackedTokens } = get();
+        if (trackedTokens.find(t => t.address.toLowerCase() === tokenData.address.toLowerCase())) {
+          throw new Error('El token ya está en tu lista.');
         }
+        const newToken = { ...tokenData, verified: false };
+        set({ trackedTokens: [...trackedTokens, newToken] });
+        return newToken;
       },
 
       sendNativeTransaction: async (toAddress, amountEther, dryRun = false) => {
