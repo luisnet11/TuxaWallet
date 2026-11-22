@@ -23,12 +23,19 @@ export const useWalletStore = create(
       error: null,
       trackedTokens: [],
       pendingWallet: null,
+      fiatCurrency: 'usd', // NUEVO: Moneda Fiat por defecto
+
+      setFiatCurrency: (currency) => set({ fiatCurrency: currency }),
 
       createWallet: async (password) => {
         set({ isLoading: true, error: null });
         try {
           const { vaultBlob, mnemonic } = await createNewWallet(password, 24);
-          set({ pendingWallet: vaultBlob, mnemonicSession: mnemonic, isLoading: false });
+          // Añadir nombre por defecto a la primera cuenta
+          const accountsWithNames = vaultBlob.accounts.map((acc, i) => ({ ...acc, name: `Cuenta ${i}` }));
+          const updatedBlob = { ...vaultBlob, accounts: accountsWithNames };
+          
+          set({ pendingWallet: updatedBlob, mnemonicSession: mnemonic, isLoading: false });
           return mnemonic;
         } catch (err) {
           set({ isLoading: false, error: err.message });
@@ -53,11 +60,14 @@ export const useWalletStore = create(
         set({ isLoading: true, error: null });
         try {
           const { vaultBlob, mnemonic: cleanMnemonic } = await importWalletFromMnemonic(mnemonic, password);
+          const accountsWithNames = vaultBlob.accounts.map((acc, i) => ({ ...acc, name: `Cuenta ${i}` }));
+          const updatedBlob = { ...vaultBlob, accounts: accountsWithNames };
+          
           set({
-            vaultBlob,
+            vaultBlob: updatedBlob,
             isUnlocked: true,
             mnemonicSession: cleanMnemonic,
-            activeAccount: vaultBlob.accounts[0],
+            activeAccount: updatedBlob.accounts[0],
             trackedTokens: DEFAULT_TOKENS,
             isLoading: false,
           });
@@ -74,10 +84,19 @@ export const useWalletStore = create(
         set({ isLoading: true, error: null });
         try {
           const { mnemonic } = await unlockWallet(vaultBlob, password);
+          
+          // Asegurar retrocompatibilidad: si las cuentas viejas no tienen nombre, añadirlo
+          const accountsWithNames = vaultBlob.accounts.map((acc, i) => ({ 
+            ...acc, 
+            name: acc.name || `Cuenta ${i}` 
+          }));
+          const updatedBlob = { ...vaultBlob, accounts: accountsWithNames };
+
           set({
+            vaultBlob: updatedBlob,
             isUnlocked: true,
             mnemonicSession: mnemonic,
-            activeAccount: vaultBlob.accounts[0],
+            activeAccount: updatedBlob.accounts[0],
             isLoading: false,
             trackedTokens: trackedTokens.length === 0 ? DEFAULT_TOKENS : trackedTokens,
           });
@@ -99,6 +118,7 @@ export const useWalletStore = create(
           activeAccount: null,
           trackedTokens: [],
           pendingWallet: null,
+          fiatCurrency: 'usd',
           error: null,
         });
       },
@@ -114,9 +134,16 @@ export const useWalletStore = create(
         try {
           const nextIndex = vaultBlob.accounts.length;
           const updatedBlob = addAccountToWallet(vaultBlob, mnemonicSession, nextIndex);
+          
+          // Añadir nombre a la nueva cuenta
+          const newAccounts = updatedBlob.accounts.map((acc, i) => ({
+            ...acc,
+            name: acc.name || `Cuenta ${i}`
+          }));
+
           set({
-            vaultBlob: updatedBlob,
-            activeAccount: updatedBlob.accounts[nextIndex],
+            vaultBlob: { ...updatedBlob, accounts: newAccounts },
+            activeAccount: newAccounts[nextIndex],
             isLoading: false,
           });
         } catch (err) {
@@ -130,7 +157,33 @@ export const useWalletStore = create(
         if (account) set({ activeAccount: account, error: null });
       },
 
-      // FUNCIÓN ACTUALIZADA: Recibe el objeto completo
+      // NUEVO: Renombrar una cuenta
+      updateAccountName: (accountIndex, newName) => {
+        const { vaultBlob, activeAccount } = get();
+        if (!vaultBlob) return;
+        
+        const updatedAccounts = vaultBlob.accounts.map(acc => 
+          acc.index === accountIndex ? { ...acc, name: newName } : acc
+        );
+        
+        set({
+          vaultBlob: { ...vaultBlob, accounts: updatedAccounts },
+          activeAccount: activeAccount?.index === accountIndex ? { ...activeAccount, name: newName } : activeAccount
+        });
+      },
+
+      // NUEVO: Obtener la semilla (requiere contraseña)
+      getMnemonicForBackup: async (password) => {
+        const { vaultBlob } = get();
+        if (!vaultBlob) throw new Error('No hay billetera.');
+        try {
+          const { mnemonic } = await unlockWallet(vaultBlob, password);
+          return mnemonic;
+        } catch (err) {
+          throw new Error('Contraseña incorrecta.');
+        }
+      },
+
       addTrackedToken: (tokenData) => {
         const { trackedTokens } = get();
         if (trackedTokens.find(t => t.address.toLowerCase() === tokenData.address.toLowerCase())) {
@@ -246,7 +299,11 @@ export const useWalletStore = create(
         }
         return persistedState;
       },
-      partialize: (state) => ({ vaultBlob: state.vaultBlob, trackedTokens: state.trackedTokens }),
+      partialize: (state) => ({ 
+        vaultBlob: state.vaultBlob, 
+        trackedTokens: state.trackedTokens,
+        fiatCurrency: state.fiatCurrency 
+      }),
     }
   )
 );
