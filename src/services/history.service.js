@@ -31,24 +31,40 @@ export async function fetchTransactionHistory(address, nextParams = null) {
 
   try {
     const cleanAddress = address.trim();
-    const urlObj = new URL(`${BLOCKSCOUT_API_URL}/addresses/${cleanAddress}/transactions`);
-    urlObj.searchParams.set('t', String(Date.now()));
+    // Validar que sea una dirección EVM válida antes de consultar
+    if (!/^0x[a-fA-F0-9]{40}$/.test(cleanAddress)) {
+      throw new Error('Dirección EVM inválida');
+    }
 
+    const urlObj = new URL(`${BLOCKSCOUT_API_URL}/addresses/${cleanAddress}/transactions`);
+
+    // Solo añadir parámetros de paginación válidos si existen (evitando objetos anidados)
     if (nextParams && typeof nextParams === 'object') {
       Object.entries(nextParams).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && value !== '') {
+        if (value !== null && value !== undefined && value !== '' && typeof value !== 'object') {
           urlObj.searchParams.set(key, String(value));
         }
       });
     }
 
+    // Usamos 'no-store' para evitar caché, en lugar de un parámetro en la URL
     const response = await fetch(urlObj.toString(), {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+      },
     });
 
     if (!response.ok) {
-      throw new Error(`Error en API del explorador (${response.status})`);
+      let detail = '';
+      try {
+        const errBody = await response.json();
+        detail = errBody?.message ? ` - ${errBody.message}` : '';
+      } catch (e) {
+        // Ignorar si el cuerpo del error no es JSON
+      }
+      throw new Error(`Error en API del explorador (${response.status})${detail}`);
     }
 
     const data = await response.json();
@@ -117,4 +133,4 @@ export async function fetchTransactionHistory(address, nextParams = null) {
       error: error?.message || 'No se pudo consultar el historial',
     };
   }
-}
+  }
