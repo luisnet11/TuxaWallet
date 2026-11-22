@@ -4,7 +4,7 @@ import { ChevronLeft, Search, SlidersHorizontal, Plus, Coins, UserPlus } from 'l
 import { isAddress } from 'viem';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
-import AddressModal from '../../components/AddressModal.jsx';
+import { formatTokenAmount, formatUsd, toUsdNumber } from '../../utils/formatBalance.js'; // Usamos las utilidades
 
 export default function Assets() {
   const navigate = useNavigate();
@@ -12,14 +12,13 @@ export default function Assets() {
   const returnTo = searchParams.get('returnTo');
   const addressParam = searchParams.get('address'); 
   
-  const { trackedTokens, fetchERC20Balance, fetchActiveAccountBalance } = useWalletStore();
+  const { trackedTokens, fiatCurrency } = useWalletStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [hideZero, setHideZero] = useState(false);
   const [balances, setBalances] = useState({});
   const [prices, setPrices] = useState({});
   const [isLoading, setIsLoading] = useState(true);
-  const [showImportModal, setShowImportModal] = useState(false);
 
   // FILTRO DE SEGURIDAD
   const cleanTrackedTokens = useMemo(() => {
@@ -30,17 +29,15 @@ export default function Assets() {
     const loadAssets = async () => {
       setIsLoading(true);
       try {
-        const ethBal = await fetchActiveAccountBalance();
+        // Ya no llamamos a fetchActiveAccountBalance ni fetchERC20Balance del store principal
+        // Podríamos usar el useBalanceStore, pero para simplificar esta vista, haremos fetch directo temporal
+        // Nota: En una refactorización futura, Assets también usará useBalances.
         
-        const tokenBals = {};
-        for (const token of cleanTrackedTokens) {
-          tokenBals[token.address] = await fetchERC20Balance(token.address);
-        }
-
+        // Como el store principal ya no tiene las funciones, solo mostraremos los precios por ahora
+        // (El balance real se maneja en el Dashboard con useBalances)
+        
         const tokenAddrs = ['native', ...cleanTrackedTokens.map(t => t.address)];
-        const fetchedPrices = await fetchTokenPrices(tokenAddrs, 'usd');
-
-        setBalances({ native: ethBal, ...tokenBals });
+        const fetchedPrices = await fetchTokenPrices(tokenAddrs, fiatCurrency);
         setPrices(fetchedPrices);
       } catch (error) {
         console.error(error);
@@ -49,7 +46,7 @@ export default function Assets() {
       }
     };
     loadAssets();
-  }, [cleanTrackedTokens]);
+  }, [cleanTrackedTokens, fiatCurrency]);
 
   const allTokens = useMemo(() => {
     return [
@@ -60,16 +57,13 @@ export default function Assets() {
 
   const filteredTokens = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return allTokens
-      .filter(t => {
-        const matchesSearch = t.symbol.toLowerCase().includes(term) || 
-                              t.name.toLowerCase().includes(term) || 
-                              t.address.toLowerCase().includes(term);
-        const bal = parseFloat(balances[t.address] || '0');
-        const matchesZero = hideZero ? bal > 0 : true;
-        return matchesSearch && matchesZero;
-      });
-  }, [allTokens, searchTerm, hideZero, balances]);
+    return allTokens.filter(t => {
+      const matchesSearch = t.symbol.toLowerCase().includes(term) || 
+                            t.name.toLowerCase().includes(term) || 
+                            t.address.toLowerCase().includes(term);
+      return matchesSearch;
+    });
+  }, [allTokens, searchTerm]);
 
   const handleTokenClick = (token) => {
     if (returnTo === 'send') {
@@ -86,7 +80,6 @@ export default function Assets() {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative">
       
-      {/* HEADER CORREGIDO */}
       <header className="p-4 flex items-center space-x-2 bg-gray-950 z-10 sticky top-0">
         <button onClick={() => navigate(-1)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
           <ChevronLeft size={20} />
@@ -96,7 +89,7 @@ export default function Assets() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input 
             type="text"
-            placeholder="Buscar token o dirección..."
+            placeholder="Buscar token..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-gray-900 border border-white/5 rounded-xl py-2 pl-9 pr-3 text-sm focus:ring-1 focus:ring-purple-500 outline-none"
@@ -106,21 +99,16 @@ export default function Assets() {
         <button 
           onClick={() => setHideZero(!hideZero)}
           className={`p-2 rounded-lg transition-colors ${hideZero ? 'bg-purple-600/20 text-purple-400' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
-          title="Ocultar saldo cero"
         >
           <SlidersHorizontal size={20} />
         </button>
         
-        <button 
-          onClick={() => navigate('/import-token')} 
-          className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white"
-        >
+        <button onClick={() => navigate('/import-token')} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white">
           <Plus size={20} />
         </button>
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto pb-10">
-        
         <div className="space-y-3 mt-4">
           {isLoading ? (
             [1, 2, 3, 4, 5].map(i => <div key={i} className="h-16 bg-gray-900 animate-pulse rounded-2xl"></div>)
@@ -128,20 +116,14 @@ export default function Assets() {
             <div className="text-center py-10">
               <p className="text-gray-500 text-sm mb-4">No se encontraron tokens.</p>
               {isValidAddressSearch && !isAlreadyTracked && (
-                <button 
-                  onClick={() => setShowImportModal(true)}
-                  className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 mx-auto transition-colors"
-                >
-                  <UserPlus size={18} />
-                  <span>Importar este contrato</span>
+                <button onClick={() => navigate('/import-token')} className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 mx-auto transition-colors">
+                  <UserPlus size={18} /><span>Importar este contrato</span>
                 </button>
               )}
             </div>
           ) : (
             filteredTokens.map((token) => {
-              const bal = balances[token.address] || '0.0000';
-              const fiat = (parseFloat(bal) * (prices[token.symbol] || 0)).toFixed(2);
-
+              const price = prices[token.symbol] || 0;
               return (
                 <button 
                   key={token.address}
@@ -160,8 +142,8 @@ export default function Assets() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-sm">{bal}</p>
-                    <p className="text-xs text-gray-400">${fiat}</p>
+                    <p className="font-bold text-sm">--</p>
+                    <p className="text-xs text-gray-400">{formatUsd(price)}</p>
                   </div>
                 </button>
               );
@@ -169,12 +151,6 @@ export default function Assets() {
           )}
         </div>
       </main>
-
-      <AddressModal 
-        isOpen={showImportModal} 
-        onClose={() => setShowImportModal(false)} 
-        contactToEdit={{ address: searchTerm, label: '', note: '', isFavorite: false }} 
-      />
     </div>
   );
-    }
+}
