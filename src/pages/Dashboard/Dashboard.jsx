@@ -37,7 +37,7 @@ const AssetRow = memo(function AssetRow({ symbol, subtitle, decimals, value, sta
           </p>
         </div>
       </div>
-      <div className={`text-right ${stale ? 'opacity-60' : ''}`} title={stale ? 'Valor desactualizado' : undefined}>
+      <div className={`text-right ${stale ? 'opacity-60' : ''}`}>
         <p className="font-bold text-sm">{noContract ? '--' : amount}</p>
         <p className="text-xs text-gray-400">{usd === null ? '--' : formatUsd(usd)}</p>
       </div>
@@ -47,7 +47,6 @@ const AssetRow = memo(function AssetRow({ symbol, subtitle, decimals, value, sta
 
 export default function Dashboard() {
   const navigate = useNavigate();
-
   const { 
     activeAccount, vaultBlob, lockWallet, trackedTokens, 
     setActiveAccount, addNewAccount, isUnlocked, fiatCurrency 
@@ -81,7 +80,6 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Precios dinámicos según Fiat seleccionado
   useEffect(() => {
     let cancelled = false;
     fetchTokenPrices(['native', ...tokens.map((t) => t.address)], fiatCurrency)
@@ -90,6 +88,7 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, [tokenKey, fiatCurrency]);
 
+  // Carga del historial con protección contra fallos
   useEffect(() => {
     const address = activeAccount?.address;
     if (!address) return undefined;
@@ -97,9 +96,15 @@ export default function Dashboard() {
     setHistory(null);
     setGasStatus(null);
     
-    fetchTransactionHistory(address).then((res) => { 
-      if (!cancelled) setHistory(res && res.data ? res.data.slice(0, 3) : []); 
-    });
+    fetchTransactionHistory(address)
+      .then((res) => { 
+        if (!cancelled) setHistory(res && res.data ? res.data.slice(0, 3) : []); 
+      })
+      .catch(err => {
+        console.error('Error history:', err);
+        if (!cancelled) setHistory([]); // Fallback para no dejar el skeleton infinito
+      });
+
     fetchSponsoredGasStatus(address).then((g) => { if (!cancelled) setGasStatus(g); });
     return () => { cancelled = true; };
   }, [activeAccount?.address]);
@@ -267,4 +272,4 @@ export default function Dashboard() {
       </nav>
     </div>
   );
-    }
+          }
