@@ -13,10 +13,11 @@ import Dashboard from './pages/Dashboard/Dashboard.jsx';
 import AddressBook from './pages/AddressBook/AddressBook.jsx';
 import Send from './pages/Send/Send.jsx';
 import Assets from './pages/Assets/Assets.jsx';
-import Diagnostics from './pages/Diagnostics/Diagnostics.jsx';
 import Receive from './pages/Receive/Receive.jsx';
 import Activities from './pages/Activities/Activities.jsx';
-import ImportToken from './pages/ImportToken/ImportToken.jsx'; // <-- NUEVO IMPORT
+import ImportToken from './pages/ImportToken/ImportToken.jsx';
+import Settings from './pages/Settings/Settings.jsx'; // <-- NUEVO IMPORT
+import Diagnostics from './pages/Diagnostics/Diagnostics.jsx';
 
 // Componentes Globales
 import ApprovalModal from './components/ApprovalModal.jsx';
@@ -26,6 +27,7 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
 
   if (!isUnlocked) {
+    // Guardamos la ruta actual para volver a ella después del desbloqueo
     return <Navigate to="/unlock" state={{ from: location }} replace />;
   }
   return children;
@@ -34,6 +36,7 @@ function ProtectedRoute({ children }) {
 function AppContent() {
   const { vaultBlob, isUnlocked } = useWalletStore();
 
+  // Bloqueo por inactividad (5 minutos)
   useAutoLock(5);
 
   return (
@@ -60,9 +63,10 @@ function AppContent() {
         <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
         <Route path="/receive" element={<ProtectedRoute><Receive /></ProtectedRoute>} />
         <Route path="/activities" element={<ProtectedRoute><Activities /></ProtectedRoute>} />
-        <Route path="/import-token" element={<ProtectedRoute><ImportToken /></ProtectedRoute>} /> {/* <-- NUEVA RUTA */}
+        <Route path="/import-token" element={<ProtectedRoute><ImportToken /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} /> {/* <-- NUEVA RUTA */}
 
-        {/* Ruta Raíz y Catch-all */}
+        {/* Ruta Raíz y Catch-all: Redirección automática basada en el estado */}
         <Route 
           path="*" 
           element={
@@ -89,4 +93,4 @@ export default function App() {
       <AppContent />
     </BrowserRouter>
   );
-}
+        }
