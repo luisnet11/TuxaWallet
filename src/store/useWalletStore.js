@@ -139,11 +139,16 @@ export const useWalletStore = create(
         if (account) set({ activeAccount: account, error: null });
       },
 
-      addTrackedToken: async (tokenAddress) => {
-        const { trackedTokens } = get();
-        if (trackedTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase())) {
-          throw new Error('El token ya está agregado.');
-        }
+addTrackedToken: (tokenData) => {
+  const { trackedTokens } = get();
+  if (trackedTokens.find(t => t.address.toLowerCase() === tokenData.address.toLowerCase())) {
+    throw new Error('El token ya está en tu lista.');
+  }
+  
+  const newToken = { ...tokenData, verified: false };
+  set({ trackedTokens: [...trackedTokens, newToken] });
+  return newToken;
+},
 
         set({ isLoading: true, error: null });
         try {
