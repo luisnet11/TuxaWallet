@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, ShieldAlert, AlertCircle } from 'lucide-react';
+import { X, ShieldAlert } from 'lucide-react';
 import { useWalletStore } from '../store/useWalletStore.js';
 import { useAddressBookStore } from '../store/useAddressBookStore.js';
 import { unlockWallet } from '../vault/walletVault.js';
@@ -24,7 +24,7 @@ export default function ConfirmTxModal({ isOpen, onClose, token, amount, recipie
     if (!isKnownContact) {
       setIsVerifying(true);
       try {
-        await unlockWallet(vaultBlob, password); // Verifica la contraseña
+        await unlockWallet(vaultBlob, password);
       } catch (err) {
         setError('Contraseña incorrecta. Intenta de nuevo.');
         setIsVerifying(false);
@@ -33,18 +33,15 @@ export default function ConfirmTxModal({ isOpen, onClose, token, amount, recipie
       setIsVerifying(false);
     }
     
-    onConfirm(); // Ejecuta el envío real
+    onConfirm();
   };
 
   return (
-    // El contenedor principal hace que todo se alinee al fondo
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end z-[60]">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end md:justify-center items-center z-[60]">
       
-      {/* Contenedor de la hoja deslizante */}
-      <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl p-6 shadow-2xl border-t border-white/10 relative animate-in slide-in-from-bottom duration-300">
+      <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t md:border border-white/10 relative animate-in slide-in-from-bottom md:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         
-        {/* Manija visual (Drag handle) */}
-        <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mb-6"></div>
+        <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mb-6 md:hidden"></div>
 
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold">Revisar Transacción</h2>
@@ -53,10 +50,8 @@ export default function ConfirmTxModal({ isOpen, onClose, token, amount, recipie
           </button>
         </div>
 
-        {/* Resumen Visual */}
         <div className="flex flex-col items-center mb-6">
           <h1 className="text-4xl font-bold mb-2">{amount} <span className="text-2xl text-gray-400">{token.symbol}</span></h1>
-          
           <div className="flex items-center space-x-2 bg-gray-950 px-4 py-2 rounded-full border border-white/5">
             <span className="text-xs text-gray-500">Para:</span>
             <AccountAvatar address={recipient} size={20} />
@@ -64,7 +59,6 @@ export default function ConfirmTxModal({ isOpen, onClose, token, amount, recipie
           </div>
         </div>
 
-        {/* Detalles de Red */}
         <div className="bg-gray-950 rounded-2xl p-4 mb-6 border border-white/5 space-y-3">
           <div className="flex justify-between items-center text-sm">
             <span className="text-gray-400">Red</span>
@@ -76,7 +70,6 @@ export default function ConfirmTxModal({ isOpen, onClose, token, amount, recipie
           </div>
         </div>
 
-        {/* Si es dirección nueva, pedir contraseña */}
         {!isKnownContact && (
           <div className="mb-6">
             <div className="flex items-start space-x-2 bg-red-500/10 border border-red-500/20 p-3 rounded-xl mb-3">
@@ -106,4 +99,4 @@ export default function ConfirmTxModal({ isOpen, onClose, token, amount, recipie
       </div>
     </div>
   );
-    }
+      }
