@@ -4,7 +4,6 @@ import { useWalletStore } from './store/useWalletStore.js';
 import { injectTuxaProvider } from './services/walletProvider.js';
 import useAutoLock from './hooks/useAutoLock.js';
 
-// Páginas
 import Welcome from './pages/Welcome/Welcome.jsx';
 import CreateWallet from './pages/CreateWallet/CreateWallet.jsx';
 import ImportWallet from './pages/ImportWallet/ImportWallet.jsx';
@@ -16,10 +15,9 @@ import Assets from './pages/Assets/Assets.jsx';
 import Receive from './pages/Receive/Receive.jsx';
 import Activities from './pages/Activities/Activities.jsx';
 import ImportToken from './pages/ImportToken/ImportToken.jsx';
-import Settings from './pages/Settings/Settings.jsx'; // <-- NUEVO IMPORT
+import Settings from './pages/Settings/Settings.jsx';
 import Diagnostics from './pages/Diagnostics/Diagnostics.jsx';
 
-// Componentes Globales
 import ApprovalModal from './components/ApprovalModal.jsx';
 
 function ProtectedRoute({ children }) {
@@ -27,7 +25,6 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
 
   if (!isUnlocked) {
-    // Guardamos la ruta actual para volver a ella después del desbloqueo
     return <Navigate to="/unlock" state={{ from: location }} replace />;
   }
   return children;
@@ -36,27 +33,22 @@ function ProtectedRoute({ children }) {
 function AppContent() {
   const { vaultBlob, isUnlocked } = useWalletStore();
 
-  // Bloqueo por inactividad (5 minutos)
   useAutoLock(5);
 
   return (
     <>
       <Routes>
-        {/* Rutas Públicas */}
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/create-wallet" element={<CreateWallet />} />
         <Route path="/import-wallet" element={<ImportWallet />} />
         
-        {/* Ruta de Desbloqueo */}
         <Route 
           path="/unlock" 
           element={vaultBlob ? <UnlockWallet /> : <Navigate to="/welcome" replace />} 
         />
 
-        {/* Ruta de Diagnóstico Temporal */}
         <Route path="/diagnostics" element={<Diagnostics />} />
 
-        {/* Rutas Protegidas (Requieren sesión activa) */}
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/address-book" element={<ProtectedRoute><AddressBook /></ProtectedRoute>} />
         <Route path="/send" element={<ProtectedRoute><Send /></ProtectedRoute>} />
@@ -64,9 +56,8 @@ function AppContent() {
         <Route path="/receive" element={<ProtectedRoute><Receive /></ProtectedRoute>} />
         <Route path="/activities" element={<ProtectedRoute><Activities /></ProtectedRoute>} />
         <Route path="/import-token" element={<ProtectedRoute><ImportToken /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} /> {/* <-- NUEVA RUTA */}
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
-        {/* Ruta Raíz y Catch-all: Redirección automática basada en el estado */}
         <Route 
           path="*" 
           element={
@@ -77,7 +68,6 @@ function AppContent() {
         />
       </Routes>
 
-      {/* MODAL GLOBAL DE APROBACIÓN (EIP-1193) */}
       <ApprovalModal />
     </>
   );
@@ -93,4 +83,4 @@ export default function App() {
       <AppContent />
     </BrowserRouter>
   );
-        }
+}
