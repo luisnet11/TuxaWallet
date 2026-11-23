@@ -1,15 +1,35 @@
-"dependencies": {
-  "@capacitor/core": "^8.6.0",
-  "@dicebear/collection": "^9.2.2",
-  "@dicebear/core": "^9.2.2",
-  "@scure/bip32": "^2.4.0",
-  "@scure/bip39": "^2.4.0",
-  "html5-qrcode": "^2.3.8",
-  "lucide-react": "^1.70.0",
-  "react": "^18.3.1",
-  "react-dom": "^18.3.1",
-  "react-qr-code": "^2.0.15",
-  "react-router-dom": "^6.28.0",
-  "viem": "^2.57.17",
-  "zustand": "^5.0.1"
-},
+{
+  "name": "tuxawallet",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TuxaWallet — Billetera oficial multiplataforma de Tuxachain (Virtual Chain de Aurora Cloud sobre NEAR Protocol)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.6.0",
+    "@dicebear/collection": "^9.2.2",
+    "@dicebear/core": "^9.2.2",
+    "@scure/bip32": "^2.4.0",
+    "@scure/bip39": "^2.4.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^1.70.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-qr-code": "^2.0.15",
+    "react-router-dom": "^6.28.0",
+    "viem": "^2.57.17",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "@vitejs/plugin-react": "^4.3.3",
+    "daisyui": "^5.7.50",
+    "tailwindcss": "^4.3.5",
+    "vite": "^5.4.10"
+  }
+}
