@@ -24,7 +24,6 @@ export default function TxResultModal({ isOpen, onClose, result, tokenSymbol, am
   return (
     <>
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end md:justify-center items-center z-[70]">
-        
         <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t md:border border-white/10 relative animate-in slide-in-from-bottom md:zoom-in-95 duration-200 text-center max-h-[90vh] overflow-y-auto">
           
           <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mb-6 md:hidden"></div>
@@ -62,7 +61,6 @@ export default function TxResultModal({ isOpen, onClose, result, tokenSymbol, am
           </div>
 
           <div className="space-y-2">
-            {/* BOTÓN PARA GUARDAR EN LIBRETA */}
             {isSuccess && !isAlreadySaved && (
               <button 
                 onClick={() => setShowAddressModal(true)}
@@ -90,12 +88,11 @@ export default function TxResultModal({ isOpen, onClose, result, tokenSymbol, am
         </div>
       </div>
 
-      {/* CONTENEDOR Z-INDEX ALTO PARA EL MODAL DE LA LIBRETA */}
       <div className="z-[80] relative">
         <AddressModal 
           isOpen={showAddressModal} 
           onClose={() => setShowAddressModal(false)} 
-          contactToEdit={{ address: recipient, label: '', note: '', isFavorite: false }} 
+          prefilledAddress={recipient} // <-- AQUÍ USAMOS LA NUEVA PROP
         />
       </div>
     </>
