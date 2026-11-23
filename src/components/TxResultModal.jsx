@@ -17,9 +17,12 @@ export default function TxResultModal({ isOpen, onClose, result, tokenSymbol, am
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[70]">
-      <div className="bg-gray-900 border border-white/10 rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end md:justify-center items-center z-[70]">
+      
+      <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t md:border border-white/10 relative animate-in slide-in-from-bottom md:zoom-in-95 duration-200 text-center">
         
+        <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mb-6 md:hidden"></div>
+
         <div className="flex justify-center mb-4">
           {isSuccess ? (
             <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center">
@@ -70,4 +73,4 @@ export default function TxResultModal({ isOpen, onClose, result, tokenSymbol, am
       </div>
     </div>
   );
-        }
+}
