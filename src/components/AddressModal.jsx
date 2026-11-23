@@ -5,7 +5,8 @@ import { useWalletStore } from '../store/useWalletStore.js';
 import { isAddress } from 'viem';
 import QrScannerModal from './QrScannerModal.jsx';
 
-export default function AddressModal({ isOpen, onClose, contactToEdit }) {
+// NUEVA PROP: prefilledAddress
+export default function AddressModal({ isOpen, onClose, contactToEdit, prefilledAddress }) {
   const { addContact, updateContact } = useAddressBookStore();
   const { activeAccount } = useWalletStore();
   
@@ -15,16 +16,19 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
   const [error, setError] = useState('');
   const [showQrModal, setShowQrModal] = useState(false);
 
+  // Lógica corregida: diferencia entre editar y crear con dirección pre-llenada
   useEffect(() => {
     if (contactToEdit) {
       setLabel(contactToEdit.label);
       setAddress(contactToEdit.address);
       setNote(contactToEdit.note);
     } else {
-      setLabel(''); setAddress(''); setNote('');
+      setLabel(''); 
+      setAddress(prefilledAddress || ''); 
+      setNote('');
     }
     setError('');
-  }, [contactToEdit, isOpen]);
+  }, [contactToEdit, prefilledAddress, isOpen]);
 
   if (!isOpen) return null;
 
@@ -46,7 +50,7 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
       if (contactToEdit) {
         updateContact(contactToEdit.id, { label, address, note });
       } else {
-        addContact({ label, address, note });
+        addContact({ label, address, note }); // Ahora sí creará el contacto
       }
       onClose();
     } catch (err) {
@@ -65,7 +69,7 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end md:justify-center items-center z-[60]">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end md:justify-center items-center z-[80]">
       
       <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t md:border border-white/10 relative animate-in slide-in-from-bottom md:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         
@@ -103,7 +107,7 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
                 onChange={(e) => setAddress(e.target.value)} 
                 placeholder="0x..."
                 className="w-full bg-gray-950 border border-white/10 rounded-xl p-3 pr-20 text-sm focus:ring-1 focus:ring-purple-500 outline-none font-mono"
-                disabled={!!contactToEdit}
+                disabled={!!contactToEdit} // Solo se bloquea si estamos editando
               />
               {!contactToEdit && (
                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex space-x-1">
@@ -156,4 +160,4 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
       />
     </div>
   );
-}
+    }
