@@ -3,7 +3,7 @@ import { X, AlertCircle, Clipboard, QrCode } from 'lucide-react';
 import { useAddressBookStore } from '../store/useAddressBookStore.js';
 import { useWalletStore } from '../store/useWalletStore.js';
 import { isAddress } from 'viem';
-import QrScannerModal from './QrScannerModal.jsx'; // <-- IMPORTAMOS EL ESCÁNER
+import QrScannerModal from './QrScannerModal.jsx';
 
 export default function AddressModal({ isOpen, onClose, contactToEdit }) {
   const { addContact, updateContact } = useAddressBookStore();
@@ -13,9 +13,8 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
   const [address, setAddress] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
-  const [showQrModal, setShowQrModal] = useState(false); // <-- ESTADO PARA EL QR
+  const [showQrModal, setShowQrModal] = useState(false);
 
-  // Cargar datos si estamos editando
   useEffect(() => {
     if (contactToEdit) {
       setLabel(contactToEdit.label);
@@ -33,13 +32,11 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
     e.preventDefault();
     setError('');
 
-    // 1. Validar que sea una dirección EVM real (EIP-55)
     if (!isAddress(address)) {
       setError('La dirección ingresada no es una dirección EVM válida.');
       return;
     }
 
-    // 2. Validar que no sea la dirección del usuario actual
     if (activeAccount && address.toLowerCase() === activeAccount.address.toLowerCase()) {
       setError('No puedes guardar tu propia dirección activa.');
       return;
@@ -68,11 +65,15 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-      <div className="bg-gray-900 border border-white/10 rounded-2xl w-full max-w-sm p-5 shadow-2xl">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end md:justify-center items-center z-[60]">
+      
+      <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t md:border border-white/10 relative animate-in slide-in-from-bottom md:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+        
+        <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mb-6 md:hidden"></div>
+
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-bold">{contactToEdit ? 'Editar Contacto' : 'Añadir Dirección'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={20} /></button>
+          <button onClick={onClose} className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-white"><X size={20} /></button>
         </div>
 
         {error && (
@@ -102,16 +103,14 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
                 onChange={(e) => setAddress(e.target.value)} 
                 placeholder="0x..."
                 className="w-full bg-gray-950 border border-white/10 rounded-xl p-3 pr-20 text-sm focus:ring-1 focus:ring-purple-500 outline-none font-mono"
-                disabled={!!contactToEdit} // No permitir cambiar la dirección al editar
+                disabled={!!contactToEdit}
               />
-              {/* BOTONES DE PEGAR Y QR (Solo si no estamos editando) */}
               {!contactToEdit && (
                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex space-x-1">
                   <button 
                     type="button"
                     onClick={handlePaste}
                     className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-lg transition-colors"
-                    title="Pegar dirección"
                   >
                     <Clipboard size={16} />
                   </button>
@@ -119,7 +118,6 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
                     type="button"
                     onClick={() => setShowQrModal(true)}
                     className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-lg transition-colors"
-                    title="Escanear QR"
                   >
                     <QrCode size={16} />
                   </button>
@@ -148,7 +146,6 @@ export default function AddressModal({ isOpen, onClose, contactToEdit }) {
         </form>
       </div>
 
-      {/* MODAL DEL ESCÁNER QR INTEGRADO */}
       <QrScannerModal 
         isOpen={showQrModal} 
         onClose={() => setShowQrModal(false)} 
