@@ -10,7 +10,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; font-src 'self' data:; connect-src 'self' https://0x4e4542e3.rpc.aurora-cloud.dev https://0x4e4542e3.explorer.aurora-cloud.dev https://api.coingecko.com https://*.workers.dev; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.jsdelivr.net; media-src 'self' blob: mediastream:; font-src 'self' data:; connect-src 'self' https://0x4e4542e3.rpc.aurora-cloud.dev https://0x4e4542e3.explorer.aurora-cloud.dev https://api.coingecko.com https://cdn.jsdelivr.net https://*.workers.dev; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
         },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "no-referrer" },
