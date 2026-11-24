@@ -1,12 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, Search, SlidersHorizontal, Plus, Coins, UserPlus, RefreshCw } from 'lucide-react';
+import { ChevronLeft, Search, SlidersHorizontal, Plus, Coins, UserPlus, MoreVertical } from 'lucide-react';
 import { isAddress } from 'viem';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { useBalances } from '../../hooks/useBalances.js';
 import { useDelayedFlag } from '../../hooks/useDelayedFlag.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
 import { formatTokenAmount, formatUsd, toUsdNumber } from '../../utils/formatBalance.js';
+import TokenIcon from '../../components/TokenIcon.jsx';
+import TokenFilterModal from '../../components/TokenFilterModal.jsx';
+import TokenActionModal from '../../components/TokenActionModal.jsx';
 
 const LEGACY_ETH_ERC20 = '0x5a524251df27a25ac6b9964a93e1c23ad692688d';
 
@@ -16,46 +19,54 @@ export default function Assets() {
   const returnTo = searchParams.get('returnTo');
   const addressParam = searchParams.get('address'); 
   
-  const { trackedTokens, fiatCurrency } = useWalletStore();
+  const { trackedTokens, fiatCurrency, favoriteTokens, hiddenTokens } = useWalletStore();
 
-  // Extraemos isRefreshing y refetch del hook de saldos
   const { entry, isInitialLoading, isRefreshing, refetch } = useBalances();
   const showSkeleton = useDelayedFlag(isInitialLoading, 200);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [hideZero, setHideZero] = useState(false);
   const [prices, setPrices] = useState({});
+  
+  // Estados de modales y filtros
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [selectedTokenForAction, setSelectedTokenForAction] = useState(null);
+  const [sortOption, setSortOption] = useState('balance-desc');
+  const [hideZero, setHideZero] = useState(false);
 
-  const cleanTrackedTokens = useMemo(() => {
-    return trackedTokens.filter(t => t.address.toLowerCase() !== LEGACY_ETH_ERC20);
-  }, [trackedTokens]);
+  // Filtrar tokens ocultos y el contrato legado
+  const visibleTokens = useMemo(() => {
+    return trackedTokens.filter(t => 
+      t.address.toLowerCase() !== LEGACY_ETH_ERC20 && 
+      !hiddenTokens.includes(t.address.toLowerCase())
+    );
+  }, [trackedTokens, hiddenTokens]);
 
-  // Cargar precios cuando cambian los tokens o el Fiat
   useEffect(() => {
     let cancelled = false;
     const loadPrices = async () => {
-      const tokenAddrs = ['native', ...cleanTrackedTokens.map(t => t.address)];
+      const tokenAddrs = ['native', ...visibleTokens.map(t => t.address)];
       const fetchedPrices = await fetchTokenPrices(tokenAddrs, fiatCurrency);
       if (!cancelled) setPrices(fetchedPrices);
     };
     loadPrices();
     return () => { cancelled = true; };
-  }, [cleanTrackedTokens, fiatCurrency]);
+  }, [visibleTokens, fiatCurrency]);
 
   const allTokens = useMemo(() => {
     return [
       { address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18 },
-      ...cleanTrackedTokens
+      ...visibleTokens
     ];
-  }, [cleanTrackedTokens]);
+  }, [visibleTokens]);
 
-  const filteredTokens = useMemo(() => {
+  // Lógica de Filtrado y Ordenamiento
+  const filteredAndSortedTokens = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return allTokens.filter(t => {
+    
+    let result = allTokens.filter(t => {
       const matchesSearch = t.symbol.toLowerCase().includes(term) || 
                             t.name.toLowerCase().includes(term) || 
                             t.address.toLowerCase().includes(term);
-      
       if (!matchesSearch) return false;
 
       if (hideZero && entry) {
@@ -65,13 +76,40 @@ export default function Assets() {
 
       return true;
     });
-  }, [allTokens, searchTerm, hideZero, entry]);
+
+    // Ordenamiento (Favoritos primero)
+    result.sort((a, b) => {
+      const aFav = favoriteTokens.includes(a.address.toLowerCase());
+      const bFav = favoriteTokens.includes(b.address.toLowerCase());
+      if (aFav && !bFav) return -1;
+      if (!aFav && bFav) return 1;
+
+      if (sortOption === 'name-asc') return a.symbol.localeCompare(b.symbol);
+      if (sortOption === 'name-desc') return b.symbol.localeCompare(a.symbol);
+
+      const getBal = (token) => {
+        const item = token.address === 'native' ? entry?.native : entry?.tokens?.[token.address.toLowerCase()];
+        return item?.value ? Number(item.value) / Math.pow(10, token.decimals) : 0;
+      };
+
+      const aBal = getBal(a);
+      const bBal = getBal(b);
+
+      if (sortOption === 'balance-desc') return bBal - aBal;
+      if (sortOption === 'balance-asc') return aBal - bBal;
+
+      return 0;
+    });
+
+    return result;
+  }, [allTokens, searchTerm, hideZero, sortOption, favoriteTokens, entry]);
 
   const handleTokenClick = (token) => {
     if (returnTo === 'send') {
       const addrParam = addressParam ? `&address=${addressParam}` : '';
       navigate(`/send?token=${token.address}${addrParam}`);
     } else {
+      // Próximamente: Ir a detalles del token
       alert(`Ver detalles de ${token.symbol} (Próximamente)`); 
     }
   };
@@ -99,11 +137,10 @@ export default function Assets() {
         </div>
 
         <button 
-          onClick={() => setHideZero(!hideZero)}
-          className={`p-2 rounded-lg transition-colors ${hideZero ? 'bg-purple-600/20 text-purple-400' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
-          title="Ocultar saldo cero"
+          onClick={() => setShowFilterModal(true)}
+          className={`p-2 rounded-lg transition-colors bg-gray-900 text-gray-400 hover:text-white`}
         >
-          <SlidersHorizontal size={20} />
+          <SlidersHorizontal size={20} className={(sortOption !== 'balance-desc' || hideZero) ? 'text-purple-400' : ''} />
         </button>
         
         <button onClick={() => navigate('/import-token')} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white">
@@ -113,14 +150,13 @@ export default function Assets() {
 
       <main className="flex-1 px-4 overflow-y-auto pb-10">
         
-        {/* BOTÓN DE ACTUALIZAR CON ANIMACIÓN */}
         <div className="flex justify-end items-center mb-2 mt-2">
           <button 
             onClick={refetch} 
             disabled={isRefreshing}
             className="flex items-center space-x-1 text-xs text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50 bg-purple-600/10 px-3 py-1.5 rounded-full"
           >
-            <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+            <Coins size={12} className={isRefreshing ? 'animate-spin' : ''} />
             <span>{isRefreshing ? 'Actualizando...' : 'Actualizar saldos'}</span>
           </button>
         </div>
@@ -128,7 +164,7 @@ export default function Assets() {
         <div className="space-y-3">
           {showSkeleton ? (
             [1, 2, 3, 4, 5].map(i => <div key={i} className="h-16 bg-gray-900 animate-pulse rounded-2xl"></div>)
-          ) : filteredTokens.length === 0 ? (
+          ) : filteredAndSortedTokens.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-gray-500 text-sm mb-4">No se encontraron tokens.</p>
               {isValidAddressSearch && !isAlreadyTracked && (
@@ -138,46 +174,79 @@ export default function Assets() {
               )}
             </div>
           ) : (
-            filteredTokens.map((token) => {
-              const item = token.address === 'native' 
-                ? entry?.native 
-                : entry?.tokens?.[token.address.toLowerCase()];
+            filteredAndSortedTokens.map((token) => {
+              const item = token.address === 'native' ? entry?.native : entry?.tokens?.[token.address.toLowerCase()];
               
               const value = item?.value ?? null;
               const status = item?.status;
               const price = prices[token.symbol] || 0;
               const noContract = status === 'no-contract';
+              const isFavorite = favoriteTokens.includes(token.address.toLowerCase());
 
               const amountFormatted = formatTokenAmount(value, token.decimals);
               const usd = value === null || price === null ? null : toUsdNumber(value, token.decimals, price);
 
               return (
-                <button 
+                <div 
                   key={token.address}
-                  onClick={() => handleTokenClick(token)}
-                  className="w-full bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-4 flex items-center justify-between transition-colors"
+                  className="relative w-full bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl transition-colors flex items-center"
                 >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">
-                      <Coins size={20} className={token.address === 'native' ? 'text-purple-400' : 'text-gray-400'} />
+                  {/* Área clickeable principal */}
+                  <button 
+                    onClick={() => handleTokenClick(token)}
+                    className="flex-1 p-4 flex items-center justify-between text-left rounded-l-2xl"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <TokenIcon address={token.address} symbol={token.symbol} size={40} />
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <p className="font-bold text-sm">{token.symbol}</p>
+                          {isFavorite && <span className="text-[10px] text-yellow-400">★</span>}
+                        </div>
+                        <p className={`text-xs ${noContract ? 'text-yellow-400' : 'text-gray-400'} font-mono`}>
+                          {noContract ? 'No existe' : (token.address === 'native' ? 'Token Nativo' : `${token.address.slice(0, 6)}...${token.address.slice(-4)}`)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <p className="font-bold text-sm">{token.symbol}</p>
-                      <p className={`text-xs ${noContract ? 'text-yellow-400' : 'text-gray-400'} font-mono`}>
-                        {noContract ? 'No existe' : (token.address === 'native' ? 'Token Nativo' : `${token.address.slice(0, 6)}...${token.address.slice(-4)}`)}
-                      </p>
+                    <div className={`text-right mr-2 ${item?.stale ? 'opacity-60' : ''}`}>
+                      <p className="font-bold text-sm">{noContract ? '--' : amountFormatted}</p>
+                      <p className="text-xs text-gray-400">{usd === null ? '--' : formatUsd(usd)}</p>
                     </div>
+                  </button>
+
+                  {/* Botón de opciones (3 puntos) */}
+                  <div className="pr-2 h-full flex items-center justify-center border-l border-white/5">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setSelectedTokenForAction(token); }}
+                      className="p-2 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                    >
+                      <MoreVertical size={18} />
+                    </button>
                   </div>
-                  <div className={`text-right ${item?.stale ? 'opacity-60' : ''}`}>
-                    <p className="font-bold text-sm">{noContract ? '--' : amountFormatted}</p>
-                    <p className="text-xs text-gray-400">{usd === null ? '--' : formatUsd(usd)}</p>
-                  </div>
-                </button>
+                </div>
               );
             })
           )}
         </div>
       </main>
+
+      {/* MODALES */}
+      <TokenFilterModal 
+        isOpen={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        currentSort={sortOption}
+        hideZero={hideZero}
+        onApply={({ sort, hideZero: hide }) => {
+          setSortOption(sort);
+          setHideZero(hide);
+        }}
+      />
+
+      <TokenActionModal 
+        isOpen={!!selectedTokenForAction}
+        onClose={() => setSelectedTokenForAction(null)}
+        token={selectedTokenForAction}
+      />
     </div>
   );
 }
