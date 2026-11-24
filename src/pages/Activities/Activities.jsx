@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, SlidersHorizontal, X, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
+import { ChevronLeft, SlidersHorizontal, RefreshCw, AlertCircle } from 'lucide-react';
 import { useWalletStore } from '../../store/useWalletStore.js';
+import { useTransactionStore } from '../../store/useTransactionStore.js';
 import { fetchTransactionHistory } from '../../services/history.service.js';
-import { TUXACHAIN_EXPLORER_URL } from '../../services/tuxachain.config.js';
 import TransactionIcon from '../../components/TransactionIcon.jsx';
+import TransactionDetailModal from '../../components/TransactionDetailModal.jsx';
+import FilterModal from '../../components/FilterModal.jsx';
 
 function getDateGroup(isoString) {
   const date = new Date(isoString);
@@ -21,32 +23,44 @@ function getDateGroup(isoString) {
 export default function Activities() {
   const navigate = useNavigate();
   const { activeAccount } = useWalletStore();
+  const { transactions: cachedTxs, addTransactions } = useTransactionStore();
+  
+  const addressKey = activeAccount?.address?.toLowerCase();
 
-  const [transactions, setTransactions] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Estados
+  const [isLoading, setIsLoading] = useState(!cachedTxs[addressKey]?.length);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [nextPage, setNextPage] = useState(null);
-  const [filterType, setFilterType] = useState('all');
+  const [errorMsg, setErrorMsg] = useState(null);
+  
+  // Modales
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [errorMsg, setErrorMsg] = useState(null); // NUEVO ESTADO
+  const [selectedTx, setSelectedTx] = useState(null);
+  const [filters, setFilters] = useState({ type: 'all', status: 'all' });
 
+  // Obtener las transacciones del cache o del estado local
+  const displayTxs = cachedTxs[addressKey] || [];
+
+  // 1. Carga Inicial (Caché + Actualización en segundo plano)
   const loadInitial = async (isRefresh = false) => {
-    if (!activeAccount?.address) return;
+    if (!addressKey) return;
     if (isRefresh) setIsRefreshing(true);
-    else setIsLoading(true);
+    else if (!displayTxs.length) setIsLoading(true);
     setErrorMsg(null);
 
     try {
-      const result = await fetchTransactionHistory(activeAccount.address);
+      const result = await fetchTransactionHistory(addressKey);
+      
       if (result.error) {
         setErrorMsg(result.error);
+      } else {
+        // Guardamos en el store persistente
+        addTransactions(addressKey, result.data);
+        setNextPage(result.nextPage);
       }
-      setTransactions(result.data || []);
-      setNextPage(result.nextPage);
     } catch (e) {
       setErrorMsg('Error inesperado al conectar con el explorador.');
-      setTransactions([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -55,27 +69,40 @@ export default function Activities() {
 
   useEffect(() => {
     loadInitial(false);
-  }, [activeAccount?.address]);
+  }, [addressKey]); // Se ejecuta al montar o cambiar de cuenta
 
+  // 2. Paginación
   const handleLoadMore = async () => {
     if (!nextPage || isLoadingMore) return;
     setIsLoadingMore(true);
     try {
-      const result = await fetchTransactionHistory(activeAccount.address, nextPage);
+      const result = await fetchTransactionHistory(addressKey, nextPage);
       if (result.error) setErrorMsg(result.error);
-      setTransactions(prev => [...prev, ...(result.data || [])]);
-      setNextPage(result.nextPage);
-    } catch(e) {
+      else {
+        addTransactions(addressKey, result.data);
+        setNextPage(result.nextPage);
+      }
+    } catch (e) {
       setErrorMsg('Error al cargar más transacciones.');
     } finally {
       setIsLoadingMore(false);
     }
   };
 
+  // 3. Filtrado y Agrupación por fecha
   const groupedTransactions = useMemo(() => {
-    const filtered = transactions.filter(tx => {
-      if (filterType === 'sent') return tx.isSender;
-      if (filterType === 'received') return !tx.isSender;
+    let filtered = displayTxs.filter(tx => {
+      // Filtro de Estado
+      if (filters.status !== 'all' && tx.status !== filters.status) return false;
+      
+      // Filtro de Tipo
+      if (filters.type !== 'all') {
+        if (filters.type === 'send' && !tx.isSender) return false;
+        if (filters.type === 'receive' && tx.isSender) return false;
+        if (filters.type === 'swap' && tx.type !== 'swap') return false;
+        if (filters.type === 'bridge' && tx.type !== 'bridge') return false;
+        if (filters.type === 'approve' && tx.type !== 'approve') return false;
+      }
       return true;
     });
 
@@ -87,15 +114,14 @@ export default function Activities() {
     });
 
     return groups;
-  }, [transactions, filterType]);
+  }, [displayTxs, filters]);
 
-  const openExplorer = (hash) => {
-    window.open(`${TUXACHAIN_EXPLORER_URL}/tx/${hash}`, '_blank');
-  };
+  if (!activeAccount) return null;
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-10">
       
+      {/* HEADER */}
       <header className="p-4 flex items-center justify-between bg-gray-950 z-20 sticky top-0 border-b border-white/5">
         <button onClick={() => navigate('/dashboard')} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
           <ChevronLeft size={20} />
@@ -110,8 +136,11 @@ export default function Activities() {
           >
             <RefreshCw size={20} className={isRefreshing ? 'animate-spin text-purple-400' : ''} />
           </button>
-          <button onClick={() => setShowFilterModal(true)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
-            <SlidersHorizontal size={20} className={filterType !== 'all' ? 'text-purple-400' : ''} />
+          <button onClick={() => setShowFilterModal(true)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors relative">
+            <SlidersHorizontal size={20} className={filters.type !== 'all' || filters.status !== 'all' ? 'text-purple-400' : ''} />
+            {(filters.type !== 'all' || filters.status !== 'all') && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-purple-500 rounded-full"></span>
+            )}
           </button>
         </div>
       </header>
@@ -122,7 +151,7 @@ export default function Activities() {
           <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs flex items-center gap-2 mb-4">
             <AlertCircle size={16} className="shrink-0" /> 
             <div>
-              <p className="font-bold">No se pudo cargar el historial</p>
+              <p className="font-bold">Problema de conexión</p>
               <p>{errorMsg}</p>
             </div>
           </div>
@@ -145,16 +174,13 @@ export default function Activities() {
                   {txs.map((tx, index) => (
                     <button 
                       key={`${tx.hash}-${index}`}
-                      onClick={() => openExplorer(tx.hash)}
-                      className="w-full bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-3 flex items-center justify-between transition-colors group text-left"
+                      onClick={() => setSelectedTx(tx)} // <-- Abre el modal
+                      className="w-full bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-3 flex items-center justify-between transition-colors text-left"
                     >
                       <div className="flex items-center space-x-3">
                         <TransactionIcon type={tx.type} />
                         <div>
-                          <p className="font-bold text-sm capitalize flex items-center gap-2">
-                            {tx.method}
-                            <ExternalLink size={10} className="text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </p>
+                          <p className="font-bold text-sm capitalize">{tx.method}</p>
                           <p className="text-xs text-gray-400">
                             {tx.isSender ? 'Para: ' : 'De: '} 
                             {tx.isSender 
@@ -177,6 +203,7 @@ export default function Activities() {
               </div>
             ))}
             
+            {/* PAGINACIÓN */}
             {nextPage && (
               <div className="pt-4 pb-8 flex justify-center">
                 <button 
@@ -193,32 +220,19 @@ export default function Activities() {
         )}
       </main>
 
-      {showFilterModal && (
-        <div className="fixed inset-0 bg-black/80 flex flex-col justify-end z-50">
-          <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">Filtrar Actividad</h2>
-              <button onClick={() => setShowFilterModal(false)} className="text-gray-400 hover:text-white"><X size={24}/></button>
-            </div>
-            
-            <div className="space-y-2">
-              {[
-                { id: 'all', label: 'Todas las transacciones' },
-                { id: 'sent', label: 'Solo enviadas' },
-                { id: 'received', label: 'Solo recibidas' }
-              ].map(option => (
-                <button
-                  key={option.id}
-                  onClick={() => { setFilterType(option.id); setShowFilterModal(false); }}
-                  className={`w-full p-4 rounded-xl text-left transition-colors ${filterType === option.id ? 'bg-purple-600/20 border border-purple-500/30 text-purple-400' : 'bg-gray-950 text-gray-300 hover:bg-gray-800'}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODALES */}
+      <FilterModal 
+        isOpen={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        currentFilters={filters}
+        onApply={(newFilters) => setFilters(newFilters)}
+      />
+
+      <TransactionDetailModal 
+        isOpen={!!selectedTx}
+        onClose={() => setSelectedTx(null)}
+        tx={selectedTx}
+      />
     </div>
   );
-                  }
+      }
