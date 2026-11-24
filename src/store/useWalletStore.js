@@ -24,8 +24,36 @@ export const useWalletStore = create(
       trackedTokens: [],
       pendingWallet: null,
       fiatCurrency: 'usd',
+      
+      // ESTADOS PARA GESTIÓN DE TOKENS
+      favoriteTokens: [],
+      hiddenTokens: [],
 
       setFiatCurrency: (currency) => set({ fiatCurrency: currency }),
+
+      toggleFavoriteToken: (address) => {
+        const lower = address.toLowerCase();
+        set((state) => {
+          const isFav = state.favoriteTokens.includes(lower);
+          return {
+            favoriteTokens: isFav 
+              ? state.favoriteTokens.filter(a => a !== lower) 
+              : [...state.favoriteTokens, lower]
+          };
+        });
+      },
+
+      toggleHideToken: (address) => {
+        const lower = address.toLowerCase();
+        set((state) => {
+          const isHidden = state.hiddenTokens.includes(lower);
+          return {
+            hiddenTokens: isHidden 
+              ? state.hiddenTokens.filter(a => a !== lower) 
+              : [...state.hiddenTokens, lower]
+          };
+        });
+      },
 
       createWallet: async (password) => {
         set({ isLoading: true, error: null });
@@ -87,7 +115,12 @@ export const useWalletStore = create(
       },
 
       lockWallet: () => set({ isUnlocked: false, mnemonicSession: null, activeAccount: null, error: null }),
-      resetWallet: () => set({ vaultBlob: null, isUnlocked: false, mnemonicSession: null, activeAccount: null, trackedTokens: [], pendingWallet: null, fiatCurrency: 'usd', error: null }),
+
+      resetWallet: () => set({ 
+        vaultBlob: null, isUnlocked: false, mnemonicSession: null, activeAccount: null, 
+        trackedTokens: [], pendingWallet: null, fiatCurrency: 'usd', 
+        favoriteTokens: [], hiddenTokens: [], error: null 
+      }),
 
       addNewAccount: () => {
         const { vaultBlob, mnemonicSession, isLoading, isUnlocked } = get();
@@ -138,10 +171,9 @@ export const useWalletStore = create(
         return newToken;
       },
 
-      // NUEVO: Estimar costo de Gas (con protección para red gratis)
       estimateGasFee: async (tokenAddress, toAddress, amount) => {
         try {
-          const { activeAccount, mnemonicSession } = get();
+          const { activeAccount, mnemonicSession, trackedTokens } = get();
           if (!activeAccount || !mnemonicSession) return { feeEth: '0', isFree: true };
           
           const publicClient = getTuxaPublicClient();
@@ -153,28 +185,25 @@ export const useWalletStore = create(
           if (tokenAddress === 'native') {
             txParams.value = parseEther(amount.toString());
           } else {
-            const token = get().trackedTokens.find(t => t.address === tokenAddress);
+            const token = trackedTokens.find(t => t.address === tokenAddress);
+            if (!token) return { feeEth: '0', isFree: true };
             const parsedAmount = parseUnits(amount.toString(), token.decimals);
             txParams.to = tokenAddress;
             txParams.data = encodeFunctionData({ abi: ERC20_ABI, functionName: 'transfer', args: [toAddress, parsedAmount] });
           }
 
-          // Intentamos estimar
           const gasLimit = await publicClient.estimateGas(txParams);
           const gasPrice = await publicClient.getGasPrice();
           
           const feeWei = gasLimit * gasPrice;
           const feeEth = formatEther(feeWei);
 
-          // Si el fee es menor a 0.00001 ETH o el precio del gas es 0, lo tratamos como gratis
           if (Number(feeEth) < 0.00001 || gasPrice === 0n) {
              return { feeEth: '0.0000', isFree: true };
           }
 
           return { feeEth: Number(feeEth).toFixed(6), isFree: false };
         } catch (error) {
-          // Si falla por fondos insuficientes en red gratis, asumimos 0
-          console.warn('Fallo estimación de gas, asumiendo red gratis:', error.shortMessage);
           return { feeEth: '0.0000', isFree: true };
         }
       },
@@ -201,8 +230,6 @@ export const useWalletStore = create(
             return { success: true, hash: signedTx, message: `✅ Firma exitosa.` };
           } else {
             const hash = await walletClient.sendTransaction(preparedTx);
-            
-            // ESPERAMOS LA CONFIRMACIÓN REAL DE LA RED
             const receipt = await publicClient.waitForTransactionReceipt({ hash });
             const gasUsed = receipt.gasUsed;
             const effectiveGasPrice = receipt.effectiveGasPrice || 0n;
@@ -249,8 +276,6 @@ export const useWalletStore = create(
             return { success: true, hash: signedTx, message: `✅ Firma ERC-20 exitosa.` };
           } else {
             const hash = await walletClient.sendTransaction(preparedTx);
-            
-            // ESPERAMOS LA CONFIRMACIÓN REAL DE LA RED
             const receipt = await publicClient.waitForTransactionReceipt({ hash });
             const gasUsed = receipt.gasUsed;
             const effectiveGasPrice = receipt.effectiveGasPrice || 0n;
@@ -284,7 +309,13 @@ export const useWalletStore = create(
         }
         return persistedState;
       },
-      partialize: (state) => ({ vaultBlob: state.vaultBlob, trackedTokens: state.trackedTokens, fiatCurrency: state.fiatCurrency }),
+      partialize: (state) => ({ 
+        vaultBlob: state.vaultBlob, 
+        trackedTokens: state.trackedTokens, 
+        fiatCurrency: state.fiatCurrency,
+        favoriteTokens: state.favoriteTokens,
+        hiddenTokens: state.hiddenTokens
+      }),
     }
   )
 );
