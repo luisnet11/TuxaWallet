@@ -5,7 +5,6 @@ import { useWalletStore } from '../store/useWalletStore.js';
 import { isAddress } from 'viem';
 import QrScannerModal from './QrScannerModal.jsx';
 
-// NUEVA PROP: prefilledAddress
 export default function AddressModal({ isOpen, onClose, contactToEdit, prefilledAddress }) {
   const { addContact, updateContact } = useAddressBookStore();
   const { activeAccount } = useWalletStore();
@@ -16,7 +15,7 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
   const [error, setError] = useState('');
   const [showQrModal, setShowQrModal] = useState(false);
 
-  // Lógica corregida: diferencia entre editar y crear con dirección pre-llenada
+  // Lógica para diferenciar entre editar un contacto o crear uno nuevo (con dirección pre-llenada)
   useEffect(() => {
     if (contactToEdit) {
       setLabel(contactToEdit.label);
@@ -36,11 +35,13 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
     e.preventDefault();
     setError('');
 
+    // 1. Validar dirección EVM
     if (!isAddress(address)) {
       setError('La dirección ingresada no es una dirección EVM válida.');
       return;
     }
 
+    // 2. Validar que no sea la cuenta activa del usuario
     if (activeAccount && address.toLowerCase() === activeAccount.address.toLowerCase()) {
       setError('No puedes guardar tu propia dirección activa.');
       return;
@@ -50,9 +51,9 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
       if (contactToEdit) {
         updateContact(contactToEdit.id, { label, address, note });
       } else {
-        addContact({ label, address, note }); // Ahora sí creará el contacto
+        addContact({ label, address, note });
       }
-      onClose();
+      onClose(); // Cierra el modal al guardar exitosamente
     } catch (err) {
       setError(err.message);
     }
@@ -69,10 +70,19 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end md:justify-center items-center z-[80]">
+    // 1. El fondo oscuro ahora tiene onClick={onClose} para cerrar al tocar fuera
+    <div 
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col justify-end md:justify-center items-center z-[80]"
+      onClick={onClose} 
+    >
       
-      <div className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t md:border border-white/10 relative animate-in slide-in-from-bottom md:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+      {/* 2. El contenedor tiene stopPropagation para que no se cierre al tocar dentro */}
+      <div 
+        className="bg-gray-900 w-full max-w-md mx-auto rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t md:border border-white/10 relative animate-in slide-in-from-bottom md:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         
+        {/* Manija visual para móvil */}
         <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mb-6 md:hidden"></div>
 
         <div className="flex justify-between items-center mb-4">
@@ -107,7 +117,7 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
                 onChange={(e) => setAddress(e.target.value)} 
                 placeholder="0x..."
                 className="w-full bg-gray-950 border border-white/10 rounded-xl p-3 pr-20 text-sm focus:ring-1 focus:ring-purple-500 outline-none font-mono"
-                disabled={!!contactToEdit} // Solo se bloquea si estamos editando
+                disabled={!!contactToEdit} // Bloqueado solo si estamos editando
               />
               {!contactToEdit && (
                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex space-x-1">
@@ -115,6 +125,7 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
                     type="button"
                     onClick={handlePaste}
                     className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-lg transition-colors"
+                    title="Pegar"
                   >
                     <Clipboard size={16} />
                   </button>
@@ -122,6 +133,7 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
                     type="button"
                     onClick={() => setShowQrModal(true)}
                     className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-lg transition-colors"
+                    title="Escanear QR"
                   >
                     <QrCode size={16} />
                   </button>
@@ -150,6 +162,7 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
         </form>
       </div>
 
+      {/* MODAL DEL ESCÁNER QR INTEGRADO */}
       <QrScannerModal 
         isOpen={showQrModal} 
         onClose={() => setShowQrModal(false)} 
@@ -160,4 +173,4 @@ export default function AddressModal({ isOpen, onClose, contactToEdit, prefilled
       />
     </div>
   );
-    }
+            }
