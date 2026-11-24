@@ -31,14 +31,12 @@ export async function fetchTransactionHistory(address, nextParams = null) {
 
   try {
     const cleanAddress = address.trim();
-    // Validar que sea una dirección EVM válida antes de consultar
     if (!/^0x[a-fA-F0-9]{40}$/.test(cleanAddress)) {
       throw new Error('Dirección EVM inválida');
     }
 
     const urlObj = new URL(`${BLOCKSCOUT_API_URL}/addresses/${cleanAddress}/transactions`);
 
-    // Solo añadir parámetros de paginación válidos si existen (evitando objetos anidados)
     if (nextParams && typeof nextParams === 'object') {
       Object.entries(nextParams).forEach(([key, value]) => {
         if (value !== null && value !== undefined && value !== '' && typeof value !== 'object') {
@@ -47,13 +45,10 @@ export async function fetchTransactionHistory(address, nextParams = null) {
       });
     }
 
-    // Usamos 'no-store' para evitar caché, en lugar de un parámetro en la URL
     const response = await fetch(urlObj.toString(), {
       method: 'GET',
       cache: 'no-store',
-      headers: {
-        Accept: 'application/json',
-      },
+      headers: { Accept: 'application/json' },
     });
 
     if (!response.ok) {
@@ -61,19 +56,12 @@ export async function fetchTransactionHistory(address, nextParams = null) {
       try {
         const errBody = await response.json();
         detail = errBody?.message ? ` - ${errBody.message}` : '';
-      } catch (e) {
-        // Ignorar si el cuerpo del error no es JSON
-      }
+      } catch (e) {}
       throw new Error(`Error en API del explorador (${response.status})${detail}`);
     }
 
     const data = await response.json();
-    const rawTransactions = Array.isArray(data?.items)
-      ? data.items
-      : Array.isArray(data?.result)
-        ? data.result
-        : [];
-
+    const rawTransactions = Array.isArray(data?.items) ? data.items : Array.isArray(data?.result) ? data.result : [];
     const nextPage = data?.next_page_params || null;
     const lowerAddr = cleanAddress.toLowerCase();
 
@@ -89,9 +77,7 @@ export async function fetchTransactionHistory(address, nextParams = null) {
       if (type === 'token_send' || type === 'token_receive') {
         const transfer = Array.isArray(tx.token_transfers)
           ? tx.token_transfers.find(
-              (t) =>
-                t.from?.hash?.toLowerCase() === lowerAddr ||
-                t.to?.hash?.toLowerCase() === lowerAddr
+              (t) => t.from?.hash?.toLowerCase() === lowerAddr || t.to?.hash?.toLowerCase() === lowerAddr
             ) || tx.token_transfers[0]
           : null;
 
@@ -105,11 +91,10 @@ export async function fetchTransactionHistory(address, nextParams = null) {
         try {
           const ethFormatted = formatEther(BigInt(tx.value));
           amount = Number(ethFormatted).toFixed(4);
-        } catch {
-          amount = '0';
-        }
+        } catch { amount = '0'; }
       }
 
+      // Extraemos los datos técnicos para el modal
       return {
         hash: tx.hash,
         timestamp: tx.timestamp,
@@ -121,16 +106,18 @@ export async function fetchTransactionHistory(address, nextParams = null) {
         symbol,
         method: formatMethodName(tx.method),
         isSender,
+        // Datos técnicos
+        blockNumber: tx.block_number || 'N/A',
+        confirmations: tx.confirmations || 0,
+        gasUsed: tx.gas_used ? BigInt(tx.gas_used).toString() : '0',
+        gasPrice: tx.gas_price ? BigInt(tx.gas_price).toString() : '0',
+        nonce: tx.nonce !== undefined ? tx.nonce : 'N/A'
       };
     });
 
     return { data: processed, nextPage, error: null };
   } catch (error) {
     console.error('[TuxaWallet] Error al obtener historial:', error);
-    return {
-      data: [],
-      nextPage: null,
-      error: error?.message || 'No se pudo consultar el historial',
-    };
+    return { data: [], nextPage: null, error: error?.message || 'No se pudo consultar el historial' };
   }
-  }
+        }
