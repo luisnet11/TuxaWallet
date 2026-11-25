@@ -1,67 +1,49 @@
 import { useState, useEffect } from 'react';
 import { getTokenLogo } from '../services/logo.service.js';
+import { isNativeToken } from '../utils/tokenHelpers.js';
 
 export default function TokenIcon({ address, symbol, size = 40 }) {
   const [logoUrl, setLogoUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const native = isNativeToken(address, symbol);
+  const lookupAddress = native ? 'native' : address;
+  const lookupSymbol = native ? 'ETH' : symbol;
+
   useEffect(() => {
     let isMounted = true;
-    
+
     const loadLogo = async () => {
       setIsLoading(true);
-      const url = await getTokenLogo(address);
-      if (isMounted) {
-        setLogoUrl(url);
-        setIsLoading(false);
+      try {
+        const url = await getTokenLogo(lookupAddress, lookupSymbol);
+        if (isMounted) setLogoUrl(url || null);
+      } catch (_) {
+        if (isMounted) setLogoUrl(null);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
 
     loadLogo();
     return () => { isMounted = false; };
-  }, [address]);
+  }, [lookupAddress, lookupSymbol]);
 
-  // Si es el token nativo (ETH) o no hay dirección, usamos el fallback
-  if (!address || address === 'native') {
-    return (
-      <div 
-        className="bg-gray-800 rounded-full flex items-center justify-center font-bold text-purple-400"
-        style={{ width: size, height: size }}
-      >
-        <span style={{ fontSize: size * 0.4 }}>{symbol?.[0] || '?'}</span>
-      </div>
-    );
-  }
-
-  // Mientras carga, mostramos un esqueleto de carga
   if (isLoading) {
     return (
-      <div 
-        className="bg-gray-800 animate-pulse rounded-full"
-        style={{ width: size, height: size }}
-      ></div>
+      <div className="bg-gray-800 animate-pulse rounded-full shrink-0" style={{ width: size, height: size }} />
     );
   }
 
-  // Si tenemos el logo, lo mostramos
   if (logoUrl) {
     return (
-      <img 
-        src={logoUrl} 
-        alt={symbol} 
-        className="rounded-full object-contain bg-gray-800 p-1"
-        style={{ width: size, height: size }}
-      />
+      <img src={logoUrl} alt={lookupSymbol || 'Token'} className="rounded-full object-contain bg-gray-800 p-1 shrink-0" style={{ width: size, height: size }} />
     );
   }
 
-  // Fallback final: Círculo con la inicial del token
   return (
-    <div 
-      className="bg-gray-800 rounded-full flex items-center justify-center font-bold text-gray-300"
-      style={{ width: size, height: size }}
-    >
-      <span style={{ fontSize: size * 0.4 }}>{symbol?.[0] || '?'}</span>
+    <div className="bg-gray-800 rounded-full flex items-center justify-center font-bold text-purple-400 shrink-0" style={{ width: size, height: size }}>
+      <span style={{ fontSize: size * 0.4 }}>{lookupSymbol?.[0] || '?'}</span>
     </div>
   );
 }
