@@ -1,8 +1,6 @@
-// src/services/logo.service.js
 import { TOKEN_MAP } from '../config/tokens.config.js';
 
-const JSDELIVR_BASE_URL =
-  'https://cdn.jsdelivr.net/gh/aurora-is-near/bridge-assets@master/tokens/';
+const JSDELIVR_BASE_URL = 'https://cdn.jsdelivr.net/gh/aurora-is-near/bridge-assets@master/tokens/';
 const CACHE_PREFIX = 'tuxa_logo_v1_';
 
 function svgToDataUri(svgText) {
@@ -33,8 +31,15 @@ export async function getTokenLogo(address, symbol = '') {
       (t) => symbol && t.symbol?.toLowerCase() === symbol.toLowerCase()
     );
 
-  const logoFile =
-    tokenInfo?.logoFile || (symbol ? `${symbol.toLowerCase()}.svg` : null);
+  let logoFile = tokenInfo?.logoFile;
+  
+  // Si no hay logoFile mapeado pero es ETH, intentamos eth.svg
+  if (!logoFile && symbol.toUpperCase() === 'ETH') {
+    logoFile = 'eth.svg';
+  } else if (!logoFile && symbol) {
+    logoFile = `${symbol.toLowerCase()}.svg`;
+  }
+  
   if (!logoFile) return null;
 
   // 3. Descargar desde jsDelivr (rama master)
@@ -59,10 +64,7 @@ export async function getTokenLogo(address, symbol = '') {
 
     return dataUri;
   } catch (error) {
-    console.warn(
-      `[TuxaWallet] No se pudo cargar el logo para ${symbol || cleanKey}:`,
-      error.message
-    );
+    console.warn(`[TuxaWallet] No se pudo cargar el logo para ${symbol || cleanKey}:`, error.message);
     return null;
   }
 }
