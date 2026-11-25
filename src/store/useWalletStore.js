@@ -11,6 +11,7 @@ import {
 } from '../vault/walletVault.js';
 import { getTuxaPublicClient, createTuxaWalletClient, ERC20_ABI } from '../services/viemClient.js';
 import { DEFAULT_TOKENS } from '../config/tokens.config.js';
+import { isNativeToken } from '../utils/tokenHelpers.js';
 
 export const useWalletStore = create(
   persist(
@@ -182,7 +183,8 @@ export const useWalletStore = create(
 
           let txParams = { account, to: toAddress, type: 'legacy' };
 
-          if (tokenAddress === 'native') {
+          // Usamos el helper isNativeToken para manejar ETH de forma unificada
+          if (isNativeToken(tokenAddress)) {
             txParams.value = parseEther(amount.toString());
           } else {
             const token = trackedTokens.find(t => t.address === tokenAddress);
