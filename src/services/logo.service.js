@@ -1,6 +1,6 @@
 import { TOKEN_MAP } from '../config/tokens.config.js';
 
-const JSDELIVR_BASE_URL = 'https://cdn.jsdelivr.net/gh/aurora-is-near/bridge-assets@main/tokens/';
+const JSDELIVR_BASE_URL = 'https://cdn.jsdelivr.net/gh/aurora-is-near/bridge-assets@master/tokens/';
 const CACHE_PREFIX = 'tuxa_logo_';
 
 export async function getTokenLogo(address) {
