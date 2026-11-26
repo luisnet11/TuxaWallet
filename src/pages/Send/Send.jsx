@@ -27,13 +27,11 @@ export default function Send() {
   const [prices, setPrices] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   
-  // Estados de Modales
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   
-  // Estados de Gas y Resultado
   const [gasEstimate, setGasEstimate] = useState({ feeEth: '0.0000', isFree: true });
   const [txResult, setTxResult] = useState(null);
 
@@ -66,7 +64,8 @@ export default function Send() {
         return;
       }
       
-      const tokenAmount = isFiatMode ? (parseFloat(amount) / (prices[selectedToken.symbol] || 1)) : parseFloat(amount);
+      const currentPrice = prices[selectedToken.symbol]?.price || 1;
+      const tokenAmount = isFiatMode ? (parseFloat(amount) / currentPrice) : parseFloat(amount);
       const gas = await estimateGasFee(selectedToken.address, recipient, tokenAmount);
       setGasEstimate(gas);
     };
@@ -78,7 +77,9 @@ export default function Send() {
   const currentItem = selectedToken.address === 'native' ? entry?.native : entry?.tokens?.[selectedToken.address.toLowerCase()];
   const balanceFormatted = formatTokenAmount(currentItem?.value, selectedToken.decimals);
   const availableBalance = currentItem?.value ? Number(currentItem.value) / Math.pow(10, selectedToken.decimals) : 0;
-  const currentPrice = prices[selectedToken.symbol] || 0;
+  
+  // CORRECCIÓN: Acceder a .price porque price.service ahora devuelve un objeto
+  const currentPrice = prices[selectedToken.symbol]?.price || 0;
 
   const tokenAmount = !amount ? 0 : (isFiatMode ? (parseFloat(amount) / currentPrice) : parseFloat(amount));
   const fiatAmount = !amount ? 0 : (isFiatMode ? parseFloat(amount) : (parseFloat(amount) * currentPrice));
@@ -92,20 +93,18 @@ export default function Send() {
 
   const handleMax = async () => {
     if (selectedToken.address === 'native') {
-      const max = Math.max(0, availableBalance - 0.001); // Reservar gas
+      const max = Math.max(0, availableBalance - 0.001);
       setAmount(isFiatMode ? (max * currentPrice).toFixed(2) : max.toString());
     } else {
       setAmount(isFiatMode ? (availableBalance * currentPrice).toFixed(2) : availableBalance.toString());
     }
   };
 
-  // PASO 1: Abrir Confirmación
   const handleFirstSendClick = () => {
     if (!isValidAddress || tokenAmount <= 0 || isInsufficientFunds) return;
     setShowConfirmModal(true);
   };
 
-  // PASO 2: Ejecutar Transacción Real
   const executeSend = async () => {
     setShowConfirmModal(false);
     setIsLoading(true);
@@ -224,18 +223,8 @@ export default function Send() {
         </div>
       </main>
 
-      {/* MODALES */}
-      <AddressModal 
-        isOpen={showAddressModal} 
-        onClose={() => setShowAddressModal(false)} 
-        prefilledAddress={recipient} 
-      />
-      
-      <QrScannerModal 
-        isOpen={showQrModal} 
-        onClose={() => setShowQrModal(false)} 
-        onScan={(addr) => setRecipient(addr)} 
-      />
+      <AddressModal isOpen={showAddressModal} onClose={() => setShowAddressModal(false)} prefilledAddress={recipient} />
+      <QrScannerModal isOpen={showQrModal} onClose={() => setShowQrModal(false)} onScan={(addr) => setRecipient(addr)} />
       
       <ConfirmTxModal 
         isOpen={showConfirmModal} 
@@ -257,4 +246,4 @@ export default function Send() {
       />
     </div>
   );
-                                        }
+    }
