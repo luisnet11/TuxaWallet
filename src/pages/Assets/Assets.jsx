@@ -74,7 +74,6 @@ export default function Assets() {
       return true;
     });
 
-    // Ordenamiento (Favoritos primero)
     result.sort((a, b) => {
       const aFav = favoriteTokens.includes(a.address.toLowerCase());
       const bFav = favoriteTokens.includes(b.address.toLowerCase());
@@ -175,13 +174,14 @@ export default function Assets() {
               
               const value = item?.value ?? null;
               const status = item?.status;
-              // CORRECCIÓN CRÍTICA: .price
-              const price = prices[token.symbol]?.price || 0; 
               const noContract = status === 'no-contract';
               const isFavorite = favoriteTokens.includes(token.address.toLowerCase());
 
               const amountFormatted = formatTokenAmount(value, token.decimals);
-              const usd = value === null || price === null ? null : toUsdNumber(value, token.decimals, price);
+              
+              // CORRECCIÓN: Verificamos si el precio realmente existe
+              const priceData = prices[token.symbol];
+              const usd = (value === null || !priceData) ? null : toUsdNumber(value, token.decimals, priceData.price);
 
               return (
                 <div 
@@ -243,4 +243,4 @@ export default function Assets() {
       />
     </div>
   );
-          }
+                                  }
