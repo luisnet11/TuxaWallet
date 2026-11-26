@@ -175,7 +175,8 @@ export default function Assets() {
               
               const value = item?.value ?? null;
               const status = item?.status;
-              const price = prices[token.symbol] || 0;
+              // CORRECCIÓN CRÍTICA: .price
+              const price = prices[token.symbol]?.price || 0; 
               const noContract = status === 'no-contract';
               const isFavorite = favoriteTokens.includes(token.address.toLowerCase());
 
@@ -192,7 +193,6 @@ export default function Assets() {
                     className="flex-1 p-4 flex items-center justify-between text-left rounded-l-2xl"
                   >
                     <div className="flex items-center space-x-3">
-                      {/* AQUÍ PASAMOS EL logoURI AL COMPONENTE */}
                       <TokenIcon address={token.address} symbol={token.symbol} logoURI={token.logoURI} size={40} />
                       <div>
                         <div className="flex items-center space-x-2">
@@ -243,4 +243,4 @@ export default function Assets() {
       />
     </div>
   );
-    }
+          }
