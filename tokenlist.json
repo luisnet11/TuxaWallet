@@ -1,0 +1,39 @@
+{
+  "name": "Tuxachain Official List",
+  "timestamp": "2026-11-25T00:00:00Z",
+  "version": { "major": 1, "minor": 0, "patch": 0 },
+  "tokens": [
+    {
+      "address": "0x8bec47865ade3b172a928df8f990bc7f2a3b9f79",
+      "name": "Aurora",
+      "symbol": "AURORA",
+      "decimals": 18,
+      "type": "bridged",
+      "logoURI": "https://cdn.jsdelivr.net/gh/aurora-is-near/bridge-assets@master/tokens/aurora.svg"
+    },
+    {
+      "address": "0xc42c30ac6cc15fac9bd938618bcaa1a1fae8501d",
+      "name": "Wrapped NEAR",
+      "symbol": "wNEAR",
+      "decimals": 24,
+      "type": "bridged",
+      "logoURI": "https://cdn.jsdelivr.net/gh/aurora-is-near/bridge-assets@master/tokens/wnear.svg"
+    },
+    {
+      "address": "0x368ebb46aca6b8d0787c96b2b20bd3cc3f2c45f7",
+      "name": "USD Coin",
+      "symbol": "USDC",
+      "decimals": 6,
+      "type": "bridged",
+      "logoURI": "https://cdn.jsdelivr.net/gh/aurora-is-near/bridge-assets@master/tokens/usdc.svg"
+    },
+    {
+      "address": "0x80da25da4d783e57d2fcda0436873a193a4beccf",
+      "name": "Tether",
+      "symbol": "USDT",
+      "decimals": 6,
+      "type": "bridged",
+      "logoURI": "https://cdn.jsdelivr.net/gh/aurora-is-near/bridge-assets@master/tokens/usdt.svg"
+    }
+  ]
+}
