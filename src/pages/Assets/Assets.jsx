@@ -27,13 +27,11 @@ export default function Assets() {
   const [searchTerm, setSearchTerm] = useState('');
   const [prices, setPrices] = useState({});
   
-  // Estados de modales y filtros
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [selectedTokenForAction, setSelectedTokenForAction] = useState(null);
   const [sortOption, setSortOption] = useState('balance-desc');
   const [hideZero, setHideZero] = useState(false);
 
-  // Filtrar tokens ocultos y el contrato legado
   const visibleTokens = useMemo(() => {
     return trackedTokens.filter(t => 
       t.address.toLowerCase() !== LEGACY_ETH_ERC20 && 
@@ -59,7 +57,6 @@ export default function Assets() {
     ];
   }, [visibleTokens]);
 
-  // Lógica de Filtrado y Ordenamiento
   const filteredAndSortedTokens = useMemo(() => {
     const term = searchTerm.toLowerCase();
     
@@ -109,7 +106,6 @@ export default function Assets() {
       const addrParam = addressParam ? `&address=${addressParam}` : '';
       navigate(`/send?token=${token.address}${addrParam}`);
     } else {
-      // Próximamente: Ir a detalles del token
       alert(`Ver detalles de ${token.symbol} (Próximamente)`); 
     }
   };
@@ -191,13 +187,13 @@ export default function Assets() {
                   key={token.address}
                   className="relative w-full bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl transition-colors flex items-center"
                 >
-                  {/* Área clickeable principal */}
                   <button 
                     onClick={() => handleTokenClick(token)}
                     className="flex-1 p-4 flex items-center justify-between text-left rounded-l-2xl"
                   >
                     <div className="flex items-center space-x-3">
-                      <TokenIcon address={token.address} symbol={token.symbol} size={40} />
+                      {/* AQUÍ PASAMOS EL logoURI AL COMPONENTE */}
+                      <TokenIcon address={token.address} symbol={token.symbol} logoURI={token.logoURI} size={40} />
                       <div>
                         <div className="flex items-center space-x-2">
                           <p className="font-bold text-sm">{token.symbol}</p>
@@ -214,7 +210,6 @@ export default function Assets() {
                     </div>
                   </button>
 
-                  {/* Botón de opciones (3 puntos) */}
                   <div className="pr-2 h-full flex items-center justify-center border-l border-white/5">
                     <button 
                       onClick={(e) => { e.stopPropagation(); setSelectedTokenForAction(token); }}
@@ -230,7 +225,6 @@ export default function Assets() {
         </div>
       </main>
 
-      {/* MODALES */}
       <TokenFilterModal 
         isOpen={showFilterModal}
         onClose={() => setShowFilterModal(false)}
@@ -249,4 +243,4 @@ export default function Assets() {
       />
     </div>
   );
-}
+    }
