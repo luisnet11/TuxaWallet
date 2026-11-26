@@ -28,18 +28,26 @@ export const useWalletStore = create(
       
       favoriteTokens: [],
       hiddenTokens: [],
-      pendingTransactions: [], // NUEVO ESTADO
+      pendingTransactions: [],
 
       setFiatCurrency: (currency) => set({ fiatCurrency: currency }),
+      clearError: () => set({ error: null }),
 
       toggleFavoriteToken: (address) => {
         const lower = address.toLowerCase();
         set((state) => {
           const isFav = state.favoriteTokens.includes(lower);
+          
+          // Lógica de límite
+          if (!isFav && state.favoriteTokens.length >= 6) {
+            return { error: 'Límite alcanzado: Solo puedes fijar un máximo de 6 tokens favoritos.' };
+          }
+
           return {
             favoriteTokens: isFav 
               ? state.favoriteTokens.filter(a => a !== lower) 
-              : [...state.favoriteTokens, lower]
+              : [...state.favoriteTokens, lower],
+            error: null // Limpiar error si la operación es exitosa
           };
         });
       },
@@ -51,7 +59,8 @@ export const useWalletStore = create(
           return {
             hiddenTokens: isHidden 
               ? state.hiddenTokens.filter(a => a !== lower) 
-              : [...state.hiddenTokens, lower]
+              : [...state.hiddenTokens, lower],
+            error: null
           };
         });
       },
@@ -192,7 +201,7 @@ export const useWalletStore = create(
           verified: false,
           logoURI: tokenData.logoURI || null 
         };
-        set({ trackedTokens: [...trackedTokens, newToken] });
+        set({ trackedTokens: [...trackedTokens, newToken], error: null });
         return newToken;
       },
 
@@ -256,13 +265,9 @@ export const useWalletStore = create(
           } else {
             const hash = await walletClient.sendTransaction(preparedTx);
             
-            // Añadir a la cola de pendientes
             addPendingTransaction({ hash, type: 'send', amount: amountEther, symbol: 'ETH', to: toAddress });
 
-            // Esperar confirmación
             const receipt = await publicClient.waitForTransactionReceipt({ hash });
-            
-            // Quitar de pendientes al terminar
             removePendingTransaction(hash);
 
             const gasUsed = receipt.gasUsed;
@@ -279,7 +284,6 @@ export const useWalletStore = create(
             };
           }
         } catch (err) {
-          // En caso de error al enviar, nos aseguramos de quitar de pendientes si se llegó a agregar
           set({ isLoading: false, error: err.shortMessage || err.message || 'Error al enviar transacción.' });
           throw err;
         }
@@ -311,13 +315,9 @@ export const useWalletStore = create(
           } else {
             const hash = await walletClient.sendTransaction(preparedTx);
             
-            // Añadir a la cola de pendientes
             addPendingTransaction({ hash, type: 'send', amount: amount, symbol: token.symbol, to: toAddress });
 
-            // Esperar confirmación
             const receipt = await publicClient.waitForTransactionReceipt({ hash });
-            
-            // Quitar de pendientes al terminar
             removePendingTransaction(hash);
 
             const gasUsed = receipt.gasUsed;
@@ -338,8 +338,6 @@ export const useWalletStore = create(
           throw err;
         }
       },
-
-      clearError: () => set({ error: null }),
     }),
     {
       name: 'tuxawallet-storage',
