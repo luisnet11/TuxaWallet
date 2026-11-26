@@ -1,49 +1,23 @@
-import { useState, useEffect, useRef, useMemo, memo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { 
-  Lock, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, 
-  Zap, Home, Activity, Settings, Coins, Copy, Check, 
+  Lock, Eye, EyeOff, Zap, Copy, Check, 
   ChevronDown, Plus, WifiOff, RefreshCw 
 } from 'lucide-react';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { useBalances } from '../../hooks/useBalances.js';
 import { useDelayedFlag } from '../../hooks/useDelayedFlag.js';
-import { fetchTransactionHistory } from '../../services/history.service.js';
 import { fetchSponsoredGasStatus } from '../../services/gas.service.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
-import { TUXACHAIN_EXPLORER_URL } from '../../services/tuxachain.config.js';
-import { formatTokenAmount, formatUsd, toUsdNumber } from '../../utils/formatBalance.js';
-import TransactionIcon from '../../components/TransactionIcon.jsx';
+import { toUsdNumber } from '../../utils/formatBalance.js';
 import AccountAvatar from '../../components/AccountAvatar.jsx';
 
-const LEGACY_ETH_ERC20 = '0x5a524251df27a25ac6b9964a93e1c23ad692688d';
-
-const AssetRow = memo(function AssetRow({ symbol, subtitle, decimals, value, status, stale, price, isNative }) {
-  const amount = formatTokenAmount(value, decimals);
-  const usd = (value === null || price === null || price === undefined) ? null : toUsdNumber(value, decimals, price);
-  const noContract = status === 'no-contract';
-  
-  return (
-    <div className="bg-gray-900 border border-white/5 rounded-2xl p-3 flex items-center justify-between">
-      <div className="flex items-center space-x-3">
-        <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">
-          <Coins size={20} className={isNative ? 'text-purple-400' : 'text-gray-400'} />
-        </div>
-        <div>
-          <p className="font-bold text-sm">{symbol}</p>
-          <p className={`text-xs ${noContract ? 'text-yellow-400' : 'text-gray-400'}`}>
-            {noContract ? 'No existe' : subtitle}
-          </p>
-        </div>
-      </div>
-      <div className={`text-right ${stale ? 'opacity-60' : ''}`} title={stale ? 'Valor desactualizado' : undefined}>
-        <p className="font-bold text-sm">{noContract ? '--' : amount}</p>
-        <p className="text-xs text-gray-400">{usd === null ? '--' : formatUsd(usd)}</p>
-      </div>
-    </div>
-  );
-});
+// Nuevos componentes modulares
+import QuickActions from '../../components/QuickActions.jsx';
+import BottomNav from '../../components/BottomNav.jsx';
+import FavoriteTokens from '../../components/FavoriteTokens.jsx';
+import PendingTransactions from '../../components/PendingTransactions.jsx';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -59,20 +33,21 @@ export default function Dashboard() {
     }))
   );
 
+  // Usamos el motor de saldos para calcular el total
   const { entry, isInitialLoading, isRefreshing, refetch } = useBalances();
   const showSkeleton = useDelayedFlag(isInitialLoading, 200);
 
   const [prices, setPrices] = useState({});
-  const [history, setHistory] = useState(null);
   const [gasStatus, setGasStatus] = useState(null);
   const [hideBalance, setHideBalance] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const menuRef = useRef(null);
 
-  const tokens = useMemo(() => trackedTokens.filter(t => t.address.toLowerCase() !== LEGACY_ETH_ERC20), [trackedTokens]);
+  const tokens = useMemo(() => trackedTokens.filter(t => t.address.toLowerCase() !== '0x5a524251df27a25ac6b9964a93e1c23ad692688d'), [trackedTokens]);
   const tokenKey = tokens.map(t => t.address.toLowerCase()).join(',');
 
+  // Cerrar menú al hacer clic fuera
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) setShowAccountMenu(false);
@@ -81,7 +56,7 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Carga de precios con Fiat dinámico
+  // Cargar precios para calcular el Total Balance
   useEffect(() => {
     let cancelled = false;
     fetchTokenPrices(['native', ...tokens.map((t) => t.address)], fiatCurrency)
@@ -90,54 +65,47 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, [tokenKey, fiatCurrency]);
 
-  // Carga de historial y gas
+  // Cargar estado del Gas
   useEffect(() => {
     const address = activeAccount?.address;
     if (!address) return undefined;
     let cancelled = false;
-    setHistory(null);
     setGasStatus(null);
     
-    fetchTransactionHistory(address)
-      .then((res) => { 
-        if (!cancelled) {
-          // Si hay error, seteamos array vacío para no dejar el esqueleto de carga
-          setHistory(res.error ? [] : (res.data ? res.data.slice(0, 3) : [])); 
-        }
-      })
-      .catch(err => {
-        console.error('Error history:', err);
-        if (!cancelled) setHistory([]); 
-      });
-
     fetchSponsoredGasStatus(address).then((g) => { if (!cancelled) setGasStatus(g); });
     return () => { cancelled = true; };
   }, [activeAccount?.address]);
 
-  const rows = useMemo(() => {
-    const nativePrice = prices['ETH'] || 0;
-    const nativeRow = { id: 'native', symbol: 'ETH', subtitle: 'Ethereum', decimals: 18, item: entry?.native, price: nativePrice, isNative: true };
-    const tokenRows = tokens.map((t) => {
-      const id = t.address.toLowerCase();
-      return { id, symbol: t.symbol, decimals: t.decimals, subtitle: `${t.address.slice(0, 6)}...${t.address.slice(-4)}`, item: entry?.tokens?.[id], price: prices[t.symbol] || 0 };
-    });
-    return [nativeRow, ...tokenRows];
-  }, [entry, tokens, prices]);
-
+  // Cálculo del saldo total en USD
   const { totalUsd, isPartial } = useMemo(() => {
     let total = 0;
     let partial = false;
-    for (const r of rows) {
-      if (r.item?.status === 'no-contract') continue;
-      if (!r.item || r.item.value === null) { partial = true; continue; }
-      if (r.item.status !== 'ok') partial = true;
-      if (r.item.value === 0n) continue;
-      const usd = toUsdNumber(r.item.value, r.decimals, r.price);
-      if (usd === null) { partial = true; continue; }
-      total += usd;
+    
+    // Nativo (ETH)
+    const nativeItem = entry?.native;
+    const nativePrice = prices['ETH']?.price || 0;
+    if (nativeItem?.value !== null && nativeItem?.value !== undefined) {
+      const usd = toUsdNumber(nativeItem.value, 18, nativePrice);
+      if (usd !== null) total += usd;
+      if (nativeItem.status !== 'ok') partial = true;
+    } else {
+      partial = true;
     }
+
+    // ERC-20 Tokens
+    tokens.forEach(t => {
+      const item = entry?.tokens?.[t.address.toLowerCase()];
+      if (item?.status === 'no-contract') return;
+      if (!item || item.value === null) { partial = true; return; }
+      if (item.status !== 'ok') partial = true;
+      
+      const price = prices[t.symbol]?.price || 0;
+      const usd = toUsdNumber(item.value, t.decimals, price);
+      if (usd !== null) total += usd;
+    });
+
     return { totalUsd: total, isPartial: partial };
-  }, [rows]);
+  }, [entry, tokens, prices]);
 
   if (!isUnlocked) return null;
   const truncatedAddress = activeAccount?.address ? `${activeAccount.address.slice(0, 6)}...${activeAccount.address.slice(-4)}` : '';
@@ -175,6 +143,8 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-24">
+      
+      {/* HEADER */}
       <header className="p-4 flex justify-between items-center bg-gray-950 z-20 relative">
         <div className="relative" ref={menuRef}>
           <button className="flex items-center space-x-3 p-1 rounded-lg hover:bg-white/5 transition-colors text-left" onClick={() => setShowAccountMenu(!showAccountMenu)}>
@@ -211,6 +181,8 @@ export default function Dashboard() {
       </header>
 
       <main className="flex-1 px-4 overflow-y-auto">
+        
+        {/* TARJETA DE BALANCE TOTAL */}
         <div className="bg-gradient-to-br from-purple-800 to-indigo-900 rounded-3xl p-5 shadow-lg border border-purple-500/30">
           <div className="flex justify-between items-stretch mb-2">
             <div className="flex flex-col justify-center">
@@ -227,54 +199,15 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-6">
-          <button onClick={() => navigate('/send')} className="bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center space-y-2 transition-colors"><div className="w-12 h-12 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center"><ArrowUpRight size={24} /></div><span className="text-sm font-medium">Enviar</span></button>
-          <button onClick={() => navigate('/receive')} className="bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center space-y-2 transition-colors"><div className="w-12 h-12 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center"><ArrowDownLeft size={24} /></div><span className="text-sm font-medium">Recibir</span></button>
-        </div>
+        {/* COMPONENTES MODULARES */}
+        <PendingTransactions />
+        <QuickActions />
+        <FavoriteTokens />
 
-        <div className="mt-8">
-          <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold">Mis activos</h3><button onClick={() => navigate('/assets')} className="text-sm text-purple-400 font-medium">Ver todos</button></div>
-          <div className="space-y-2">
-            {showSkeleton ? (
-              [1, 2, 3].map(i => <div key={i} className="h-16 bg-gray-900 animate-pulse rounded-2xl"></div>)
-            ) : (
-              rows.slice(0, 5).map((r) => (
-                <AssetRow key={r.id} symbol={r.symbol} subtitle={r.subtitle} decimals={r.decimals} value={r.item?.value} status={r.item?.status} stale={r.item?.stale} price={r.price} isNative={r.isNative} />
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold">Reciente</h3><button onClick={() => navigate('/activities')} className="text-sm text-purple-400 font-medium">Ver todas</button></div>
-          <div className="space-y-2">
-            {showSkeleton || history === null ? (
-              [1, 2].map(i => <div key={i} className="h-16 bg-gray-900 animate-pulse rounded-2xl"></div>)
-            ) : history.length === 0 ? (
-               <p className="text-sm text-gray-500 text-center py-4">No hay actividad reciente</p>
-            ) : (
-              history.map((tx, index) => (
-                <a key={tx.hash || index} href={`${TUXACHAIN_EXPLORER_URL}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" className="bg-gray-900 hover:bg-gray-800 border border-white/5 rounded-2xl p-3 flex items-center justify-between transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <TransactionIcon type={tx.type} />
-                    <div><p className="font-bold text-sm capitalize">{tx.method}</p><p className="text-xs text-gray-400">{tx.isSender ? 'Para: ' : 'De: '}{tx.isSender ? (tx.to ? `${tx.to.slice(0, 6)}...${tx.to.slice(-4)}` : 'Desc.') : (tx.from ? `${tx.from.slice(0, 6)}...${tx.from.slice(-4)}` : 'Desc.')}</p></div>
-                  </div>
-                  <div className="text-right">
-                    <p className={`font-bold text-sm ${tx.isSender ? 'text-white' : 'text-green-400'}`}>{tx.isSender ? '-' : '+'}{tx.amount} {tx.symbol}</p>
-                    <p className={`text-xs ${tx.status === 'ok' ? 'text-gray-400' : 'text-red-400'}`}>{tx.status === 'ok' ? 'Confirmada' : 'Fallida'}</p>
-                  </div>
-                </a>
-              ))
-            )}
-          </div>
-        </div>
       </main>
 
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-gray-950 border-t border-white/10 p-4 flex justify-around items-center z-50">
-        <button className="flex flex-col items-center space-y-1 text-purple-400"><Home size={20} /><span className="text-[10px] font-medium">Inicio</span></button>
-        <button onClick={() => navigate('/activities')} className="flex flex-col items-center space-y-1 text-gray-500 hover:text-white transition-colors"><Activity size={20} /><span className="text-[10px] font-medium">Actividades</span></button>
-        <button onClick={() => navigate('/settings')} className="flex flex-col items-center space-y-1 text-gray-500 hover:text-white transition-colors"><Settings size={20} /><span className="text-[10px] font-medium">Ajustes</span></button>
-      </nav>
+      {/* BARRA DE NAVEGACIÓN INFERIOR (Ahora con pestaña Cartera) */}
+      <BottomNav />
     </div>
   );
-                                                                                              }
+                                                    }
