@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getTokenLogo } from '../services/logo.service.js';
 import { isNativeToken } from '../utils/tokenHelpers.js';
 
-export default function TokenIcon({ address, symbol, size = 40 }) {
+export default function TokenIcon({ address, symbol, logoURI, size = 40 }) {
   const [logoUrl, setLogoUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -12,11 +12,10 @@ export default function TokenIcon({ address, symbol, size = 40 }) {
 
   useEffect(() => {
     let isMounted = true;
-
     const loadLogo = async () => {
       setIsLoading(true);
       try {
-        const url = await getTokenLogo(lookupAddress, lookupSymbol);
+        const url = await getTokenLogo(lookupAddress, lookupSymbol, logoURI);
         if (isMounted) setLogoUrl(url || null);
       } catch (_) {
         if (isMounted) setLogoUrl(null);
@@ -24,22 +23,12 @@ export default function TokenIcon({ address, symbol, size = 40 }) {
         if (isMounted) setIsLoading(false);
       }
     };
-
     loadLogo();
     return () => { isMounted = false; };
-  }, [lookupAddress, lookupSymbol]);
+  }, [lookupAddress, lookupSymbol, logoURI]);
 
-  if (isLoading) {
-    return (
-      <div className="bg-gray-800 animate-pulse rounded-full shrink-0" style={{ width: size, height: size }} />
-    );
-  }
-
-  if (logoUrl) {
-    return (
-      <img src={logoUrl} alt={lookupSymbol || 'Token'} className="rounded-full object-contain bg-gray-800 p-1 shrink-0" style={{ width: size, height: size }} />
-    );
-  }
+  if (isLoading) return <div className="bg-gray-800 animate-pulse rounded-full shrink-0" style={{ width: size, height: size }} />;
+  if (logoUrl) return <img src={logoUrl} alt={lookupSymbol || 'Token'} className="rounded-full object-contain bg-gray-800 p-1 shrink-0" style={{ width: size, height: size }} />;
 
   return (
     <div className="bg-gray-800 rounded-full flex items-center justify-center font-bold text-purple-400 shrink-0" style={{ width: size, height: size }}>
