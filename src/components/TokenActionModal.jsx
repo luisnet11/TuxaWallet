@@ -1,16 +1,25 @@
-import { X, Star, EyeOff } from 'lucide-react';
+import { X, Star, EyeOff, AlertCircle } from 'lucide-react';
 import { useWalletStore } from '../store/useWalletStore.js';
 import TokenIcon from './TokenIcon.jsx';
 
 export default function TokenActionModal({ isOpen, onClose, token }) {
-  const { favoriteTokens, toggleFavoriteToken, toggleHideToken } = useWalletStore();
+  const { favoriteTokens, toggleFavoriteToken, toggleHideToken, error, clearError } = useWalletStore();
 
   if (!isOpen || !token) return null;
 
   const isFavorite = favoriteTokens.includes(token.address.toLowerCase());
 
   const handleToggleFavorite = () => {
+    clearError();
     toggleFavoriteToken(token.address);
+    
+    // Comprobar si hubo un error (límite alcanzado)
+    const currentError = useWalletStore.getState().error;
+    if (currentError) {
+      // No cerramos el modal, mostramos el error
+      return;
+    }
+    
     onClose();
   };
 
@@ -32,13 +41,21 @@ export default function TokenActionModal({ isOpen, onClose, token }) {
 
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center space-x-3">
-            <TokenIcon address={token.address} symbol={token.symbol} size={32} />
+            <TokenIcon address={token.address} symbol={token.symbol} logoURI={token.logoURI} size={32} />
             <h2 className="text-xl font-bold">{token.symbol}</h2>
           </div>
           <button onClick={onClose} className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors">
             <X size={20}/>
           </button>
         </div>
+
+        {/* MENSAJE DE ERROR (Por límite de favoritos) */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs mb-4 flex items-start gap-2">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <div className="space-y-3">
           <button 
