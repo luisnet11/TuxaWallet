@@ -10,10 +10,9 @@ import { useBalances } from '../../hooks/useBalances.js';
 import { useDelayedFlag } from '../../hooks/useDelayedFlag.js';
 import { fetchSponsoredGasStatus } from '../../services/gas.service.js';
 import { fetchTokenPrices } from '../../services/price.service.js';
-import { toUsdNumber } from '../../utils/formatBalance.js';
+import { toUsdNumber, formatUsd } from '../../utils/formatBalance.js'; // <-- AÑADIDO formatUsd
 import AccountAvatar from '../../components/AccountAvatar.jsx';
 
-// Nuevos componentes modulares
 import QuickActions from '../../components/QuickActions.jsx';
 import BottomNav from '../../components/BottomNav.jsx';
 import FavoriteTokens from '../../components/FavoriteTokens.jsx';
@@ -33,7 +32,6 @@ export default function Dashboard() {
     }))
   );
 
-  // Usamos el motor de saldos para calcular el total
   const { entry, isInitialLoading, isRefreshing, refetch } = useBalances();
   const showSkeleton = useDelayedFlag(isInitialLoading, 200);
 
@@ -47,7 +45,6 @@ export default function Dashboard() {
   const tokens = useMemo(() => trackedTokens.filter(t => t.address.toLowerCase() !== '0x5a524251df27a25ac6b9964a93e1c23ad692688d'), [trackedTokens]);
   const tokenKey = tokens.map(t => t.address.toLowerCase()).join(',');
 
-  // Cerrar menú al hacer clic fuera
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) setShowAccountMenu(false);
@@ -56,7 +53,6 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Cargar precios para calcular el Total Balance
   useEffect(() => {
     let cancelled = false;
     fetchTokenPrices(['native', ...tokens.map((t) => t.address)], fiatCurrency)
@@ -65,7 +61,6 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, [tokenKey, fiatCurrency]);
 
-  // Cargar estado del Gas
   useEffect(() => {
     const address = activeAccount?.address;
     if (!address) return undefined;
@@ -76,12 +71,10 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, [activeAccount?.address]);
 
-  // Cálculo del saldo total en USD
   const { totalUsd, isPartial } = useMemo(() => {
     let total = 0;
     let partial = false;
     
-    // Nativo (ETH)
     const nativeItem = entry?.native;
     const nativePrice = prices['ETH']?.price || 0;
     if (nativeItem?.value !== null && nativeItem?.value !== undefined) {
@@ -92,7 +85,6 @@ export default function Dashboard() {
       partial = true;
     }
 
-    // ERC-20 Tokens
     tokens.forEach(t => {
       const item = entry?.tokens?.[t.address.toLowerCase()];
       if (item?.status === 'no-contract') return;
@@ -144,7 +136,6 @@ export default function Dashboard() {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative pb-24">
       
-      {/* HEADER */}
       <header className="p-4 flex justify-between items-center bg-gray-950 z-20 relative">
         <div className="relative" ref={menuRef}>
           <button className="flex items-center space-x-3 p-1 rounded-lg hover:bg-white/5 transition-colors text-left" onClick={() => setShowAccountMenu(!showAccountMenu)}>
@@ -182,7 +173,6 @@ export default function Dashboard() {
 
       <main className="flex-1 px-4 overflow-y-auto">
         
-        {/* TARJETA DE BALANCE TOTAL */}
         <div className="bg-gradient-to-br from-purple-800 to-indigo-900 rounded-3xl p-5 shadow-lg border border-purple-500/30">
           <div className="flex justify-between items-stretch mb-2">
             <div className="flex flex-col justify-center">
@@ -192,22 +182,23 @@ export default function Dashboard() {
                 <button onClick={refetch} disabled={isRefreshing} className="text-purple-300 hover:text-white ml-1"><RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} /></button>
               </p>
               <div className="flex items-end space-x-2">
-                <h2 className="text-4xl font-bold tracking-tight">{hideBalance ? '****' : `${isPartial ? '~' : ''}$${totalUsd.toFixed(2)}`}</h2>
+                {/* CORRECCIÓN: Usamos formatUsd en lugar de toFixed(2) */}
+                <h2 className="text-4xl font-bold tracking-tight">
+                  {hideBalance ? '****' : `${isPartial ? '~' : ''}${formatUsd(totalUsd)}`}
+                </h2>
               </div>
             </div>
             <div>{showSkeleton ? <div className="bg-gray-700/50 animate-pulse h-full w-28 rounded-xl"></div> : renderGasThermometer()}</div>
           </div>
         </div>
 
-        {/* COMPONENTES MODULARES */}
         <PendingTransactions />
         <QuickActions />
         <FavoriteTokens />
 
       </main>
 
-      {/* BARRA DE NAVEGACIÓN INFERIOR (Ahora con pestaña Cartera) */}
       <BottomNav />
     </div>
   );
-                                                    }
+                }
