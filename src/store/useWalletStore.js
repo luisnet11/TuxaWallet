@@ -25,8 +25,6 @@ export const useWalletStore = create(
       trackedTokens: [],
       pendingWallet: null,
       fiatCurrency: 'usd',
-      
-      // ESTADOS PARA GESTIÓN DE TOKENS
       favoriteTokens: [],
       hiddenTokens: [],
 
@@ -107,7 +105,8 @@ export const useWalletStore = create(
           set({
             vaultBlob: updatedBlob, isUnlocked: true, mnemonicSession: mnemonic,
             activeAccount: updatedBlob.accounts[0], isLoading: false,
-            trackedTokens: trackedTokens.length === 0 ? DEFAULT_TOKENS : trackedTokens,
+            // Si el usuario ya tiene tokens, los respetamos. Si no, cargamos los por defecto.
+            trackedTokens: trackedTokens && trackedTokens.length > 0 ? trackedTokens : DEFAULT_TOKENS,
           });
         } catch (err) {
           set({ isLoading: false, error: 'Contraseña incorrecta o datos corruptos.' });
@@ -165,18 +164,23 @@ export const useWalletStore = create(
       },
 
       addTrackedToken: (tokenData) => {
-        const { trackedTokens } = get();
+        const { trackedTokens, hiddenTokens } = get();
+        
+        // Si el token está oculto, lo quitamos de la lista de ocultos
+        if (hiddenTokens.includes(tokenData.address.toLowerCase())) {
+          set({ hiddenTokens: hiddenTokens.filter(a => a !== tokenData.address.toLowerCase()) });
+        }
+
+        // Si ya está en trackedTokens, no hacemos nada
         if (trackedTokens.find(t => t.address.toLowerCase() === tokenData.address.toLowerCase())) {
-          throw new Error('El token ya está en tu lista.');
+          return; // Ya está en la lista, solo salimos
         }
         
-        // Guardamos el logoURI si viene (del JSON o importación manual)
         const newToken = { 
           ...tokenData, 
           verified: false,
           logoURI: tokenData.logoURI || null 
         };
-        
         set({ trackedTokens: [...trackedTokens, newToken] });
         return newToken;
       },
