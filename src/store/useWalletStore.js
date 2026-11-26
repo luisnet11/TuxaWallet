@@ -166,8 +166,17 @@ export const useWalletStore = create(
 
       addTrackedToken: (tokenData) => {
         const { trackedTokens } = get();
-        if (trackedTokens.find(t => t.address.toLowerCase() === tokenData.address.toLowerCase())) throw new Error('El token ya está en tu lista.');
-        const newToken = { ...tokenData, verified: false };
+        if (trackedTokens.find(t => t.address.toLowerCase() === tokenData.address.toLowerCase())) {
+          throw new Error('El token ya está en tu lista.');
+        }
+        
+        // Guardamos el logoURI si viene (del JSON o importación manual)
+        const newToken = { 
+          ...tokenData, 
+          verified: false,
+          logoURI: tokenData.logoURI || null 
+        };
+        
         set({ trackedTokens: [...trackedTokens, newToken] });
         return newToken;
       },
@@ -183,7 +192,6 @@ export const useWalletStore = create(
 
           let txParams = { account, to: toAddress, type: 'legacy' };
 
-          // Usamos el helper isNativeToken para manejar ETH de forma unificada
           if (isNativeToken(tokenAddress)) {
             txParams.value = parseEther(amount.toString());
           } else {
