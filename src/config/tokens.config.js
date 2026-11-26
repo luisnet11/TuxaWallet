@@ -4,8 +4,7 @@ export const TOKEN_MAP = {
     symbol: 'ETH',
     name: 'Ethereum',
     decimals: 18,
-    isStable: false,
-    logoFile: 'eth.svg' // <-- Nombre exacto en el repo de Aurora
+    isStable: false
   },
   '0x8bec47865ade3b172a928df8f990bc7f2a3b9f79': {
     coingeckoId: 'aurora-near',
@@ -45,14 +44,14 @@ export const TOKEN_MAP = {
     name: 'Turbo',
     decimals: 18,
     isStable: false,
-    logoFile: 'turbo.svg' // Si Turbo no está, fallará y mostrará el fallback
+    logoFile: 'turbo.svg'
   }
 };
 
+// AURORA, wNEAR, USDC, USDT se cargan por defecto. TURBO no.
 export const DEFAULT_TOKENS = [
   { address: '0x8bec47865ade3b172a928df8f990bc7f2a3b9f79', symbol: 'AURORA', name: 'Aurora', decimals: 18 },
   { address: '0xc42c30ac6cc15fac9bd938618bcaa1a1fae8501d', symbol: 'wNEAR', name: 'Wrapped NEAR', decimals: 24 },
   { address: '0x368ebb46aca6b8d0787c96b2b20bd3cc3f2c45f7', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
-  { address: '0x80da25da4d783e57d2fcda0436873a193a4beccf', symbol: 'USDT', name: 'Tether', decimals: 6 },
-  { address: '0x91b72833c45844d2182b7bcb49a08ec927b14dca', symbol: 'TURBO', name: 'Turbo', decimals: 18 }
+  { address: '0x80da25da4d783e57d2fcda0436873a193a4beccf', symbol: 'USDT', name: 'Tether', decimals: 6 }
 ];
