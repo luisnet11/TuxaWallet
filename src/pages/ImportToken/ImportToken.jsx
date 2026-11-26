@@ -1,37 +1,32 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Clipboard, AlertCircle, CheckCircle2, Search, Link as LinkIcon } from 'lucide-react';
+import { ChevronLeft, Clipboard, AlertCircle, CheckCircle2, Search, Link as LinkIcon, Eye } from 'lucide-react';
 import { isAddress, formatUnits } from 'viem';
 import { useWalletStore } from '../../store/useWalletStore.js';
 import { getTuxaPublicClient, ERC20_ABI } from '../../services/viemClient.js';
 import TokenIcon from '../../components/TokenIcon.jsx';
 
-// URL de tu repositorio JSON
 const TOKEN_LIST_URL = 'https://raw.githubusercontent.com/luisnet11/TuxaWallet/main/tokenlist.json';
 
 export default function ImportToken() {
   const navigate = useNavigate();
-  const { addTrackedToken, trackedTokens } = useWalletStore();
+  const { addTrackedToken, trackedTokens, hiddenTokens, toggleHideToken } = useWalletStore();
 
-  const [activeTab, setActiveTab] = useState('discover'); // 'discover' | 'custom'
+  const [activeTab, setActiveTab] = useState('discover');
   
-  // Estados para Descubrir
   const [officialTokens, setOfficialTokens] = useState([]);
   const [isFetchingList, setIsFetchingList] = useState(false);
   const [listError, setListError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Estados para Personalizado
   const [customAddress, setCustomAddress] = useState('');
   const [customLogo, setCustomLogo] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [customTokenData, setCustomTokenData] = useState(null);
   const [customError, setCustomError] = useState('');
 
-  // 1. Cargar la lista oficial de GitHub
   useEffect(() => {
     if (activeTab !== 'discover' || officialTokens.length > 0) return;
-
     const fetchList = async () => {
       setIsFetchingList(true);
       setListError('');
@@ -58,7 +53,6 @@ export default function ImportToken() {
     );
   }, [officialTokens, searchTerm]);
 
-  // 2. Funciones de Importación Personalizada
   const fetchCustomToken = async (addr) => {
     if (!isAddress(addr)) return;
     setIsLoading(true);
@@ -73,7 +67,6 @@ export default function ImportToken() {
         client.readContract({ address: addr, abi: ERC20_ABI, functionName: 'decimals' }),
         client.readContract({ address: addr, abi: ERC20_ABI, functionName: 'totalSupply' })
       ]);
-
       setCustomTokenData({ address: addr, name, symbol, decimals, totalSupply: formatUnits(totalSupply, decimals) });
     } catch (err) {
       setCustomError('No se pudo leer el contrato. Verifica que sea un token ERC-20.');
@@ -92,7 +85,8 @@ export default function ImportToken() {
 
   const handleImportOfficial = (token) => {
     try {
-      addTrackedToken(token);
+      // addTrackedToken ya se encarga de quitar de hiddenTokens si estaba ahí
+      addTrackedToken(token); 
       navigate('/assets');
     } catch (err) {
       alert(err.message);
@@ -104,7 +98,7 @@ export default function ImportToken() {
     try {
       addTrackedToken({
         ...customTokenData,
-        logoURI: customLogo.trim() || null // Guardamos el link del logo si existe
+        logoURI: customLogo.trim() || null
       });
       navigate('/assets');
     } catch (err) {
@@ -112,12 +106,18 @@ export default function ImportToken() {
     }
   };
 
-  const isAlreadyTracked = (addr) => trackedTokens.some(t => t.address.toLowerCase() === addr.toLowerCase());
+  // Función para verificar el estado del token en la UI
+  const getTokenStatus = (addr) => {
+    const isTracked = trackedTokens.some(t => t.address.toLowerCase() === addr.toLowerCase());
+    const isHidden = hiddenTokens.includes(addr.toLowerCase());
+    
+    if (isHidden) return 'hidden';
+    if (isTracked) return 'tracked';
+    return 'untracked';
+  };
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-950 text-white flex flex-col relative">
-      
-      {/* HEADER */}
       <header className="p-4 flex items-center space-x-3 bg-gray-950 z-10 sticky top-0">
         <button onClick={() => navigate(-1)} className="p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
           <ChevronLeft size={20} />
@@ -125,25 +125,17 @@ export default function ImportToken() {
         <h1 className="text-xl font-bold flex-1">Importar Token</h1>
       </header>
 
-      {/* TABS */}
       <div className="flex px-4 border-b border-white/10">
-        <button 
-          onClick={() => setActiveTab('discover')}
-          className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'discover' ? 'border-purple-500 text-purple-400' : 'border-transparent text-gray-500'}`}
-        >
+        <button onClick={() => setActiveTab('discover')} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'discover' ? 'border-purple-500 text-purple-400' : 'border-transparent text-gray-500'}`}>
           Descubrir
         </button>
-        <button 
-          onClick={() => setActiveTab('custom')}
-          className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'custom' ? 'border-purple-500 text-purple-400' : 'border-transparent text-gray-500'}`}
-        >
+        <button onClick={() => setActiveTab('custom')} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'custom' ? 'border-purple-500 text-purple-400' : 'border-transparent text-gray-500'}`}>
           Personalizado
         </button>
       </div>
 
       <main className="flex-1 overflow-y-auto p-4">
         
-        {/* PESTAÑA: DESCUBRIR */}
         {activeTab === 'discover' && (
           <div className="space-y-4">
             <div className="relative">
@@ -164,7 +156,7 @@ export default function ImportToken() {
             ) : (
               <div className="space-y-2">
                 {filteredOfficial.map((token) => {
-                  const alreadyTracked = isAlreadyTracked(token.address);
+                  const status = getTokenStatus(token.address);
                   return (
                     <div key={token.address} className="bg-gray-900 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
                       <div className="flex items-center space-x-3">
@@ -178,13 +170,27 @@ export default function ImportToken() {
                           <p className="text-xs text-gray-400">{token.name}</p>
                         </div>
                       </div>
-                      <button 
-                        onClick={() => handleImportOfficial(token)}
-                        disabled={alreadyTracked}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${alreadyTracked ? 'bg-gray-800 text-gray-500' : 'bg-purple-600/20 text-purple-400 hover:bg-purple-600/40'}`}
-                      >
-                        {alreadyTracked ? 'Importado' : 'Importar'}
-                      </button>
+                      
+                      {/* BOTÓN INTELIGENTE */}
+                      {status === 'tracked' ? (
+                        <button disabled className="px-4 py-2 rounded-xl text-xs font-bold bg-gray-800 text-gray-500 cursor-not-allowed">
+                          Importado
+                        </button>
+                      ) : status === 'hidden' ? (
+                        <button 
+                          onClick={() => handleImportOfficial(token)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors flex items-center space-x-1"
+                        >
+                          <Eye size={14} /> <span>Mostrar</span>
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => handleImportOfficial(token)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600/20 text-purple-400 hover:bg-purple-600/40 transition-colors"
+                        >
+                          Importar
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -193,7 +199,6 @@ export default function ImportToken() {
           </div>
         )}
 
-        {/* PESTAÑA: PERSONALIZADO */}
         {activeTab === 'custom' && (
           <div className="space-y-6">
             <p className="text-sm text-gray-400">
@@ -264,11 +269,10 @@ export default function ImportToken() {
 
                   <button 
                     onClick={handleImportCustom}
-                    disabled={isAlreadyTracked(customTokenData.address)}
-                    className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
+                    className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center space-x-2"
                   >
                     <CheckCircle2 size={20} />
-                    <span>{isAlreadyTracked(customTokenData.address) ? 'Ya importado' : 'Importar Token'}</span>
+                    <span>Importar Token</span>
                   </button>
                 </>
               )}
@@ -279,4 +283,4 @@ export default function ImportToken() {
       </main>
     </div>
   );
-    }
+        }
