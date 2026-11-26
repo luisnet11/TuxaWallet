@@ -12,7 +12,11 @@ export async function fetchTokenPrices(tokenIdentifiers, fiatCurrency = 'usd') {
     if (cachedStr) {
       const cache = JSON.parse(cachedStr);
       if ((Date.now() - cache.timestamp) < CACHE_TTL_MS && cache.fiat === targetFiat) {
-        return cache.data;
+        // Verificamos si el cache tiene el formato nuevo (con price y change24h)
+        const firstKey = Object.keys(cache.data)[0];
+        if (firstKey && typeof cache.data[firstKey] === 'object' && 'price' in cache.data[firstKey]) {
+          return cache.data;
+        }
       }
     }
   } catch (e) {}
@@ -20,10 +24,8 @@ export async function fetchTokenPrices(tokenIdentifiers, fiatCurrency = 'usd') {
   // 2. Consultar CoinGecko
   let prices = await fetchFromCoinGecko(tokenIdentifiers, targetFiat);
 
-  // 3. Fallback si CoinGecko falla (0 para no romper la UI)
-  if (!prices) {
-    prices = generateFallbackPrices(tokenIdentifiers);
-  }
+  // 3. Fallback
+  if (!prices) prices = generateFallbackPrices(tokenIdentifiers);
 
   // 4. Guardar en Caché
   try {
@@ -46,7 +48,8 @@ async function fetchFromCoinGecko(tokenIdentifiers, fiat) {
     const uniqueIds = [...new Set(ids)];
     if (uniqueIds.length === 0) return {};
 
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${uniqueIds.join(',')}&vs_currencies=${fiat}`;
+    // Añadimos include_24hr_change=true
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${uniqueIds.join(',')}&vs_currencies=${fiat}&include_24hr_change=true`;
     const response = await fetch(url);
     if (!response.ok) throw new Error('CoinGecko error');
 
@@ -56,7 +59,10 @@ async function fetchFromCoinGecko(tokenIdentifiers, fiat) {
     tokenIdentifiers.forEach(addr => {
       const info = TOKEN_MAP[addr.toLowerCase()] || TOKEN_MAP[addr];
       if (info && rawData[info.coingeckoId] && rawData[info.coingeckoId][fiat]) {
-        formatted[info.symbol] = rawData[info.coingeckoId][fiat];
+        formatted[info.symbol] = {
+          price: rawData[info.coingeckoId][fiat],
+          change24h: rawData[info.coingeckoId][`${fiat}_24h_change`] || 0
+        };
       }
     });
 
@@ -71,7 +77,7 @@ function generateFallbackPrices(tokenIdentifiers) {
   const fallback = {};
   tokenIdentifiers.forEach(addr => {
     const info = TOKEN_MAP[addr.toLowerCase()] || TOKEN_MAP[addr];
-    if (info) fallback[info.symbol] = info.isStable ? 1 : 0;
+    if (info) fallback[info.symbol] = { price: info.isStable ? 1 : 0, change24h: 0 };
   });
   return fallback;
-}
+      }
