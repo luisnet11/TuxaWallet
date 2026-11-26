@@ -23,5 +23,8 @@ export function toUsdNumber(value, decimals, price) {
 
 export function formatUsd(amount) {
   if (amount === null || amount === undefined) return '--';
+  if (amount === 0) return '$0.00';
+  // Si el valor es mayor a 0 pero menor a 1 centavo, lo indicamos
+  if (amount > 0 && amount < 0.01) return '< $0.01'; 
   return `$${amount.toFixed(2)}`;
-    }
+}
