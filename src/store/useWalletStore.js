@@ -25,8 +25,10 @@ export const useWalletStore = create(
       trackedTokens: [],
       pendingWallet: null,
       fiatCurrency: 'usd',
+      
       favoriteTokens: [],
       hiddenTokens: [],
+      pendingTransactions: [], // NUEVO ESTADO
 
       setFiatCurrency: (currency) => set({ fiatCurrency: currency }),
 
@@ -52,6 +54,18 @@ export const useWalletStore = create(
               : [...state.hiddenTokens, lower]
           };
         });
+      },
+
+      addPendingTransaction: (tx) => {
+        set((state) => ({
+          pendingTransactions: [...state.pendingTransactions, { ...tx, timestamp: Date.now() }]
+        }));
+      },
+
+      removePendingTransaction: (hash) => {
+        set((state) => ({
+          pendingTransactions: state.pendingTransactions.filter(tx => tx.hash !== hash)
+        }));
       },
 
       createWallet: async (password) => {
@@ -105,7 +119,6 @@ export const useWalletStore = create(
           set({
             vaultBlob: updatedBlob, isUnlocked: true, mnemonicSession: mnemonic,
             activeAccount: updatedBlob.accounts[0], isLoading: false,
-            // Si el usuario ya tiene tokens, los respetamos. Si no, cargamos los por defecto.
             trackedTokens: trackedTokens && trackedTokens.length > 0 ? trackedTokens : DEFAULT_TOKENS,
           });
         } catch (err) {
@@ -119,7 +132,7 @@ export const useWalletStore = create(
       resetWallet: () => set({ 
         vaultBlob: null, isUnlocked: false, mnemonicSession: null, activeAccount: null, 
         trackedTokens: [], pendingWallet: null, fiatCurrency: 'usd', 
-        favoriteTokens: [], hiddenTokens: [], error: null 
+        favoriteTokens: [], hiddenTokens: [], pendingTransactions: [], error: null 
       }),
 
       addNewAccount: () => {
@@ -166,14 +179,12 @@ export const useWalletStore = create(
       addTrackedToken: (tokenData) => {
         const { trackedTokens, hiddenTokens } = get();
         
-        // Si el token está oculto, lo quitamos de la lista de ocultos
         if (hiddenTokens.includes(tokenData.address.toLowerCase())) {
           set({ hiddenTokens: hiddenTokens.filter(a => a !== tokenData.address.toLowerCase()) });
         }
 
-        // Si ya está en trackedTokens, no hacemos nada
         if (trackedTokens.find(t => t.address.toLowerCase() === tokenData.address.toLowerCase())) {
-          return; // Ya está en la lista, solo salimos
+          return; 
         }
         
         const newToken = { 
@@ -223,7 +234,7 @@ export const useWalletStore = create(
       },
 
       sendNativeTransaction: async (toAddress, amountEther, dryRun = false) => {
-        const { isUnlocked, mnemonicSession, activeAccount, isLoading } = get();
+        const { isUnlocked, mnemonicSession, activeAccount, isLoading, addPendingTransaction, removePendingTransaction } = get();
         if (isLoading) return;
         if (!isUnlocked || !mnemonicSession) { set({ error: 'Billetera bloqueada.' }); return; }
         if (!isAddress(toAddress)) { set({ error: 'Dirección inválida.' }); throw new Error('Dirección inválida.'); }
@@ -244,7 +255,16 @@ export const useWalletStore = create(
             return { success: true, hash: signedTx, message: `✅ Firma exitosa.` };
           } else {
             const hash = await walletClient.sendTransaction(preparedTx);
+            
+            // Añadir a la cola de pendientes
+            addPendingTransaction({ hash, type: 'send', amount: amountEther, symbol: 'ETH', to: toAddress });
+
+            // Esperar confirmación
             const receipt = await publicClient.waitForTransactionReceipt({ hash });
+            
+            // Quitar de pendientes al terminar
+            removePendingTransaction(hash);
+
             const gasUsed = receipt.gasUsed;
             const effectiveGasPrice = receipt.effectiveGasPrice || 0n;
             const feeWei = gasUsed * effectiveGasPrice;
@@ -259,14 +279,14 @@ export const useWalletStore = create(
             };
           }
         } catch (err) {
-          const errorMsg = err.shortMessage || err.message || 'Error al enviar transacción.';
-          set({ isLoading: false, error: errorMsg });
+          // En caso de error al enviar, nos aseguramos de quitar de pendientes si se llegó a agregar
+          set({ isLoading: false, error: err.shortMessage || err.message || 'Error al enviar transacción.' });
           throw err;
         }
       },
 
       sendERC20Token: async (tokenAddress, toAddress, amount, dryRun = false) => {
-        const { isUnlocked, mnemonicSession, activeAccount, trackedTokens } = get();
+        const { isUnlocked, mnemonicSession, activeAccount, trackedTokens, addPendingTransaction, removePendingTransaction } = get();
         if (!isUnlocked || !mnemonicSession) throw new Error('Billetera bloqueada.');
         if (!isAddress(toAddress)) { set({ error: 'Dirección inválida.' }); throw new Error('Dirección inválida.'); }
 
@@ -290,7 +310,16 @@ export const useWalletStore = create(
             return { success: true, hash: signedTx, message: `✅ Firma ERC-20 exitosa.` };
           } else {
             const hash = await walletClient.sendTransaction(preparedTx);
+            
+            // Añadir a la cola de pendientes
+            addPendingTransaction({ hash, type: 'send', amount: amount, symbol: token.symbol, to: toAddress });
+
+            // Esperar confirmación
             const receipt = await publicClient.waitForTransactionReceipt({ hash });
+            
+            // Quitar de pendientes al terminar
+            removePendingTransaction(hash);
+
             const gasUsed = receipt.gasUsed;
             const effectiveGasPrice = receipt.effectiveGasPrice || 0n;
             const feeWei = gasUsed * effectiveGasPrice;
@@ -305,8 +334,7 @@ export const useWalletStore = create(
             };
           }
         } catch (err) {
-          const errorMsg = err.shortMessage || err.message || 'Error al enviar token.';
-          set({ isLoading: false, error: errorMsg });
+          set({ isLoading: false, error: err.shortMessage || err.message || 'Error al enviar token.' });
           throw err;
         }
       },
@@ -328,7 +356,8 @@ export const useWalletStore = create(
         trackedTokens: state.trackedTokens, 
         fiatCurrency: state.fiatCurrency,
         favoriteTokens: state.favoriteTokens,
-        hiddenTokens: state.hiddenTokens
+        hiddenTokens: state.hiddenTokens,
+        pendingTransactions: state.pendingTransactions
       }),
     }
   )
